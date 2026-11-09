@@ -7,7 +7,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik+Wet+Paint&family=Special+Elite&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik+Wet+Paint&family=Special+Elite&family=VT323&display=swap">
 <style>
 /* Layout: one full-bleed WebGL screen, overlays for title/pause/end, HUD pinned to the corners. Single dark look by choice. */
 :root{
@@ -62,6 +62,13 @@ html,body{height:100%;margin:0;background:var(--void);color:var(--bone);overflow
 #note h3{margin:0 0 12px;font-weight:400;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:#6e1a12}
 #note p{margin:0;white-space:pre-line}
 #note .close{margin-top:16px;font-size:12px;letter-spacing:.14em;color:#6a5a44;text-transform:uppercase}
+#cam{position:fixed;inset:0;pointer-events:none;z-index:5;font-family:'VT323','Courier New',monospace;color:#f1ecdc;text-shadow:0 0 4px rgba(255,255,255,.35),1px 0 0 rgba(255,60,60,.5),-1px 0 0 rgba(60,140,255,.5)}
+#cam .rec{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:max(18px,calc(env(safe-area-inset-right,0px) + 18px));font-size:26px;letter-spacing:.06em}
+#cam .rec i{display:inline-block;width:12px;height:12px;border-radius:50%;background:#e02a1e;margin-right:8px;vertical-align:2px;animation:blink 1s steps(1) infinite}
+#cam .ts{position:absolute;bottom:calc(46px + env(safe-area-inset-bottom,0px));right:max(18px,calc(env(safe-area-inset-right,0px) + 18px));font-size:22px;letter-spacing:.05em;text-align:right;line-height:1.05}
+#cam .corner{position:absolute;width:26px;height:26px;border-color:rgba(241,236,220,.55);border-style:solid}
+@keyframes blink{50%{opacity:0}}
+body.touch #cam .rec{right:76px}
 #hint{position:absolute;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));font-size:12px;letter-spacing:.08em;color:rgba(141,136,122,.8)}
 
 /* Touch controls */
@@ -103,7 +110,7 @@ h2{font-family:var(--display);font-weight:400;margin:0;font-size:clamp(40px,8vw,
 #win h2{color:var(--moss)}
 
 #scare{position:fixed;inset:0;z-index:30;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
-#scare canvas{height:100vh;max-width:none;animation:shake .07s infinite;filter:contrast(1.4)}
+#scare canvas{height:100vh;max-width:none;filter:contrast(1.4);will-change:transform}
 #scare::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse,rgba(0,0,0,0) 30%,rgba(140,0,0,.7));animation:flashred .14s infinite}
 @keyframes shake{0%{transform:translate(-12px,8px) scale(1.05) rotate(-2deg)}50%{transform:translate(10px,-10px) scale(1.12) rotate(2deg)}100%{transform:translate(-6px,4px) scale(1.08)}}
 @keyframes flashred{50%{opacity:.3}}
@@ -119,6 +126,7 @@ h2{font-family:var(--display);font-weight:400;margin:0;font-size:clamp(40px,8vw,
 <div id="flashW"></div>
 <canvas id="subl" width="512" height="800"></canvas>
 
+<div id="cam" hidden><div class="rec"><i></i>REC</div><div class="ts" id="camTs"></div></div>
 <div id="hud" hidden>
   <div id="keys"></div>
   <div id="status"></div>
@@ -158,7 +166,7 @@ h2{font-family:var(--display);font-weight:400;margin:0;font-size:clamp(40px,8vw,
     <b>F</b><span>flashlight</span>
     <b>Listen</b><span>keys chime; it whirs and clanks</span>
   </div>
-  <div class="btnrow"><button class="btn" id="play" type="button">Enter the house</button></div>
+  <div class="btnrow"><button class="btn" id="play" type="button">Enter the house</button><button class="btn btn-alt" id="gfxBtn" type="button">Graphics: High</button></div>
   <div class="stat" id="bestTitle"></div>
 </section>
 
@@ -281,7 +289,46 @@ const fmt = s => { const m = Math.floor(s/60), r = Math.floor(s%60); return m + 
 const renderer = new THREE.WebGLRenderer({ antialias:false, powerPreference:'high-performance' });
 renderer.setPixelRatio(Math.max(0.5, Math.min(window.devicePixelRatio || 1, 2) * 0.5));
 renderer.setSize(innerWidth, innerHeight);
-$('game').appendChild(renderer.domElement);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+// graphics quality: High = flashlight shadows + found-footage camera look; Low = neither (faster on phones)
+const GFX = { high:true };
+try { const g = localStorage.getItem('ayukiki-gfx'); GFX.high = g ? g === 'high' : !isTouch; } catch(e){ GFX.high = !isTouch; }
+const rtSize = new THREE.Vector2(); renderer.getDrawingBufferSize(rtSize);
+const rt = new THREE.WebGLRenderTarget(rtSize.x, rtSize.y, { minFilter:THREE.NearestFilter, magFilter:THREE.NearestFilter });
+const postScene = new THREE.Scene(), postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const postMat = new THREE.ShaderMaterial({
+  uniforms:{ tDiffuse:{ value:rt.texture }, uTime:{ value:0 }, uDanger:{ value:0 }, uRes:{ value:new THREE.Vector2(rtSize.x, rtSize.y) } },
+  vertexShader:'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader:`
+    uniform sampler2D tDiffuse; uniform float uTime, uDanger; uniform vec2 uRes; varying vec2 vUv;
+    float rnd(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)))*43758.5453); }
+    void main(){
+      vec2 uv = vUv;
+      // a rolling tape-tracking band and per-line jitter that worsens when it is close
+      float y0 = fract(uTime*0.045);
+      float band = 1.0 - smoothstep(0.0, 0.035 + uDanger*0.05, abs(uv.y - y0));
+      float line = floor(uv.y*uRes.y);
+      uv.x += (rnd(vec2(line, floor(uTime*24.0))) - 0.5)*(0.0016 + band*0.02 + uDanger*0.012);
+      if (uDanger > 0.6 && rnd(vec2(floor(uTime*9.0), 3.0)) > 0.9) uv.y += (rnd(vec2(uTime, 1.0)) - 0.5)*0.04*uDanger;
+      // slight lens barrel
+      vec2 cc = uv - 0.5; float r2 = dot(cc, cc); uv = 0.5 + cc*(1.0 + 0.07*r2);
+      // colour fringing, stronger at the edges and near danger
+      float ca = 0.0012 + 0.006*r2 + uDanger*0.006;
+      vec3 col = vec3(texture2D(tDiffuse, uv + vec2(ca, 0.0)).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - vec2(ca, 0.0)).b);
+      // camcorder grade: washed-out colour, green-grey lifted blacks, warm-dimmed highlights
+      float l = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(vec3(l), col, 0.72)*vec3(1.0, 1.03, 0.9);
+      col = col*1.35 + vec3(0.016, 0.022, 0.016);
+      col *= 0.93 + 0.07*sin(uv.y*uRes.y*3.14159);
+      col += (rnd(uv*uRes + fract(uTime)*91.7) - 0.5)*(0.05 + uDanger*0.06);
+      col += band*0.07*rnd(vec2(uv.x*500.0, uTime));
+      col *= smoothstep(0.95, 0.3, length(cc)*1.05);
+      if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) col = vec3(0.0);
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+  depthTest:false, depthWrite:false
+});
+postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat));$('game').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x030304);
 scene.fog = new THREE.FogExp2(0x030304, 0.095);
@@ -297,11 +344,27 @@ function setLights(on){
   fixtureMat.color.setHex(on ? 0xfff2cc : 0x2a2824);
 }
 const flash = new THREE.SpotLight(0xfff0cc, 2.4, 22, Math.PI/6, 0.5, 1.4);
-flash.position.set(0.15, -0.12, 0);
+flash.position.set(0.32, -0.24, 0.05);   // held off to the side, so the shadows it throws are visible
+flash.shadow.mapSize.set(1024, 1024); flash.shadow.camera.near = 0.1; flash.shadow.camera.far = 22; flash.shadow.bias = -0.0015;
 camera.add(flash); camera.add(flash.target); flash.target.position.set(0, 0, -1);
 const glow = new THREE.PointLight(0x8890a0, 0.35, 4, 2);
 camera.add(glow);
-addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); });
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.getDrawingBufferSize(rtSize); rt.setSize(rtSize.x, rtSize.y); postMat.uniforms.uRes.value.set(rtSize.x, rtSize.y);
+});
+function applyGfx(){
+  flash.castShadow = GFX.high;
+  if (GFX.high){ loadHD(); if (hdReady) applyHD(true); } else applyHD(false);
+  document.getElementById('vignette').style.display = GFX.high ? 'none' : '';
+  const b = document.getElementById('gfxBtn'); if (b) b.textContent = 'Graphics: ' + (GFX.high ? 'High' : 'Low');
+}
+function renderFrame(t){
+  if (!GFX.high){ renderer.setRenderTarget(null); renderer.render(scene, camera); return; }
+  renderer.setRenderTarget(rt); renderer.render(scene, camera); renderer.setRenderTarget(null);
+  postMat.uniforms.uTime.value = t; postMat.uniforms.uDanger.value += ((state.danger || 0) - postMat.uniforms.uDanger.value)*0.1;
+  renderer.render(postScene, postCam);
+}
 
 /* ---------- procedural textures ---------- */
 function canvasTex(w, h, draw){
@@ -576,20 +639,44 @@ function drawScare(ctx, w, h, open, cutout){
 const scareCv = $('scareCv'), scareCtx = scareCv.getContext('2d');
 drawScare(scareCtx, 512, 800, 0);
 const subl = $('subl'), flashW = $('flashW'); drawScare(subl.getContext('2d'), 512, 800, 0.6, true);
-let flashTimer = 0;
-// a split-second white-out with his face burned into it
+// close-range scare: a white burst, then his face lunges at the lens from off to one side,
+// jaw dropping open, jerking and smearing like a damaged tape, before it snaps away
+const sublCtx = subl.getContext('2d');
+let flashTimer = 0, flashAnim = null;
 function faceFlash(){
   clearTimeout(flashTimer);
+  flashAnim = { t:0, tilt:(rand() - 0.5)*0.9, side:rand() < 0.5 ? -1 : 1, lift:(rand() - 0.5)*10 };
   flashW.style.transition = subl.style.transition = 'none';
-  flashW.style.opacity = 0.72; subl.style.opacity = 0.9;
-  void flashW.offsetWidth;
-  flashTimer = setTimeout(() => {
-    flashW.style.transition = 'opacity .5s ease-out'; subl.style.transition = 'opacity .35s ease-out';
-    flashW.style.opacity = 0; subl.style.opacity = 0;
-  }, 110);
-  if (typeof noiseHit === 'function') noiseHit(A.master, { f:3200, q:.4, type:'highpass', peak:.22, dec:.25 });
+  if (typeof postMat !== 'undefined') postMat.uniforms.uDanger.value = 1.2;
+  if (typeof noiseHit === 'function' && A.ctx){
+    noiseHit(A.master, { f:3200, q:.4, type:'highpass', peak:.3, dec:.3 });
+    tone(A.master, { f:1500, f2:240, type:'sawtooth', peak:.16, dec:.4, lp:3200 });
+    tone(A.master, { f:62, f2:38, peak:.5, dec:.35 });
+  }
 }
-function clearFlash(){ clearTimeout(flashTimer); flashW.style.transition = subl.style.transition = 'none'; flashW.style.opacity = subl.style.opacity = 0; }
+function updateFlash(dt){
+  const a = flashAnim; if (!a) return;
+  a.t += dt;
+  const T = 0.62, k = Math.min(1, a.t/0.2), e = 1 - Math.pow(1 - k, 3);
+  flashW.style.opacity = Math.max(0, 0.7*(1 - a.t/0.16));
+  const scale = 0.5 + e*0.95 + Math.max(0, a.t - 0.2)*0.7;
+  const shake = 5 + 22*e + (a.t > 0.3 ? 20 : 0);
+  const jx = (rand() - 0.5)*shake, jy = (rand() - 0.5)*shake*0.7;
+  const x = a.side*(1 - e)*22, y = a.lift*(1 - e);
+  const snap = rand() < 0.12 ? (rand() - 0.5)*0.5 : 0;
+  const rot = a.tilt*(1 - e) + Math.sin(a.t*55)*0.05 + snap;
+  subl.style.transform = `translate(calc(-50% + ${x}vw + ${jx}px), calc(-50% + ${y}vh + ${jy}px)) scale(${scale}) rotate(${rot}rad)`;
+  subl.style.filter = `grayscale(.3) contrast(1.45) blur(${((1 - e)*3).toFixed(2)}px)`;
+  subl.style.opacity = a.t < 0.4 ? 0.95 : Math.max(0, 0.95*(1 - (a.t - 0.4)/0.22));
+  drawScare(sublCtx, 512, 800, Math.min(1, a.t/0.28), true);
+  for (let i = 0; i < 3; i++) if (rand() < 0.6){ const yy = rand()*760|0, hh = 6 + rand()*40|0, off = (rand() - 0.5)*70; sublCtx.drawImage(subl, 0, yy, 512, hh, off, yy, 512, hh); }
+  if (a.t >= T) clearFlash();
+}
+function clearFlash(){
+  clearTimeout(flashTimer); flashAnim = null;
+  flashW.style.transition = subl.style.transition = 'none'; flashW.style.opacity = subl.style.opacity = 0;
+  subl.style.transform = 'translate(-50%, -50%)';
+}
 const grainCv = $('grain'), grainCtx = grainCv.getContext('2d'), grainImg = grainCtx.createImageData(160, 100);
 function drawGrain(amount){
   grainCv.style.opacity = amount;
@@ -720,6 +807,7 @@ function makeCreature(){
     add(kn, new THREE.BoxGeometry(0.095, 0.06, 0.25), shoe, 0, -0.49, 0.06);
     hipsJ.push(hj); knees.push(kn);
   }
+  g.traverse(o => { if (o.isMesh && !(o.material && o.material.transparent)) o.castShadow = true; });
   scene.add(g);
   const setMouth = open => { const m = maps[open ? 1 : 0]; if (headMat.map !== m.map){ headMat.map = m.map; headMat.emissiveMap = m.glow; } };
   return { g, hip, spine, neck, head, shoulders, elbows, hipsJ, knees, hair, eyeLight, led, setMouth, headMat, pupilMat };
@@ -1522,6 +1610,7 @@ function buildLevel(){
     mesh.position.set(best.x + 0.5, levelY(f) + 0.55, best.z + 0.5); group.add(mesh);
     items.push({ kind, arg, f, x:best.x + 0.5, z:best.z + 0.5, y:levelY(f), mesh, taken:false });
   });
+  group.traverse(o => { if (o.isMesh && !(o.material && o.material.transparent)){ o.castShadow = true; o.receiveShadow = true; } });
   L = { grids, group, door, daylight, exitLight, keys, bulb, items, props, doors:dm.doors, doorMap:dm.map, hides, notes };
 }
 
@@ -1941,6 +2030,47 @@ function drawMap(){
   }
 }
 
+const camStart = new Date();
+let camLast = '';
+function updateCamTs(){
+  const d = new Date(camStart.getTime() + state.time*1000);
+  const mon = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()];
+  let h = d.getHours(); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+  const pad = n => String(n).padStart(2, '0');
+  const txt = `${ap} ${h}:${pad(d.getMinutes())}:${pad(d.getSeconds())}\n${mon}. ${pad(d.getDate())} ${d.getFullYear()}`;
+  if (txt !== camLast){ camLast = txt; $('camTs').textContent = txt; }
+}
+$('camTs').style.whiteSpace = 'pre';
+// High graphics: textures baked in Blender (colour, bump and shine maps), loaded from the tex/ folder
+const HD = [
+  ['wall_ground', [wallMatG]], ['wall_base', [wallMatB]], ['floor_wood', [floorMatG, stepMat]], ['floor_conc', [floorMatB]],
+  ['ceil_ground', [ceilMatG]], ['ceil_base', [ceilMatB]], ['wood', [woodMat]], ['rust', [rustyMat]]
+];
+let hdReady = false, hdStarted = false;
+function loadHD(){
+  if (hdStarted) return; hdStarted = true;
+  const loader = new THREE.TextureLoader(); let left = HD.length*3, failed = false;
+  for (const [name, mats] of HD){
+    const set = {};
+    for (const k of ['col', 'nrm', 'spc']){
+      const t = loader.load('tex/' + name + '_' + k + '.jpg', () => { if (--left === 0 && !failed){ hdReady = true; if (GFX.high) applyHD(true); } }, undefined, () => { failed = true; });
+      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; set[k] = t;
+    }
+    for (const m of mats){ if (!m.userData.lo) m.userData.lo = { map:m.map, specular:m.specular.getHex(), shininess:m.shininess }; m.userData.hd = set; }
+  }
+}
+function applyHD(on){
+  for (const [, mats] of HD) for (const m of mats){
+    const hd = m.userData.hd, lo = m.userData.lo; if (!hd || !lo) continue;
+    if (on){ m.map = hd.col; m.normalMap = hd.nrm; m.specularMap = hd.spc; m.specular.setHex(0x666666); m.shininess = 28; }
+    else { m.map = lo.map; m.normalMap = null; m.specularMap = null; m.specular.setHex(lo.specular); m.shininess = lo.shininess; }
+    m.needsUpdate = true;
+  }
+}
+if (isTouch) document.body.classList.add('touch');
+$('gfxBtn').addEventListener('click', () => { GFX.high = !GFX.high; try { localStorage.setItem('ayukiki-gfx', GFX.high ? 'high' : 'low'); } catch(e){} applyGfx(); });
+applyGfx();
+
 /* ---------- flow ---------- */
 const screens = ['title', 'pause', 'over', 'win'];
 function show(id){ for (const s of screens) $(s).hidden = s !== id; }
@@ -1971,7 +2101,7 @@ function startPlay(explore){
   setLights(state.explore);
   creature.g.visible = !state.explore;
   if (state.explore){ C.state = 'gone'; C.timer = Infinity; RUN.cd = Infinity; state.grace = 0; }
-  show(null); $('hud').hidden = false; touchEl.hidden = !isTouch; $('scare').hidden = true;
+  show(null); $('hud').hidden = false; $('cam').hidden = !GFX.high; touchEl.hidden = !isTouch; $('scare').hidden = true;
   state.mode = 'play';
   lockPointer();
   if (state.explore) say('Lights on. Nothing is hunting you. Look around as long as you like.' + (isTouch ? '' : ' Esc to pause or leave.'), 6); else
@@ -1993,7 +2123,7 @@ function endGame(won){
   state.mode = won ? 'won' : 'caught';
   try { if (document.exitPointerLock) document.exitPointerLock(); } catch(e){}
   touchEl.hidden = true; runHeld = false;
-  drawGrain(0); $('redpulse').style.opacity = 0; clearFlash(); mapView.hidden = true; if (L && L.props) stopPropAudio(L.props);
+  drawGrain(0); $('redpulse').style.opacity = 0; clearFlash(); mapView.hidden = true; if (L && L.props) stopPropAudio(L.props); $('cam').hidden = true;
   $('slats').hidden = true; $('note').hidden = true; setPrompt(''); muteDread();
   if (A.servoG) A.servoG.gain.value = 0;
   if (won){
@@ -2013,7 +2143,7 @@ $('quit').addEventListener('click', quitToTitle);
 function quitToTitle(){
   if (L && L.props) stopPropAudio(L.props);
   state.explore = false; setLights(false);
-  $('hud').hidden = true; touchEl.hidden = true; mapView.hidden = true; drawGrain(0); $('redpulse').style.opacity = 0; clearFlash();
+  $('hud').hidden = true; $('cam').hidden = true; touchEl.hidden = true; mapView.hidden = true; drawGrain(0); $('redpulse').style.opacity = 0; clearFlash();
   if (A.servoG) A.servoG.gain.value = 0;
   muteDread();
   newGame(); creature.g.visible = true; state.mode = 'title'; show('title');
@@ -2388,7 +2518,7 @@ function animateCreature(dt){
   if (C.speed > 0.3){ C.stepT -= dt*C.speed/3; if (C.stepT <= 0){ C.stepT = 0.38; sfx.clank(); } }
   const d = Math.hypot(P.x - C.x, P.z - C.z) + Math.abs(P.y - C.y)*2;
   if (P.light) flash.intensity = d < 8 && rand() < 0.2 + (8 - d)*0.06 ? rand()*0.5 : 2.4;
-  const prox = clamp((10 - d)/10, 0, 1);
+  const prox = clamp((10 - d)/10, 0, 1); state.danger = prox;
   $('redpulse').style.opacity = prox*(0.55 + 0.45*Math.sin(state.time*8));
   drawGrain(prox*0.13);
   C.sublT -= dt;
@@ -2453,6 +2583,11 @@ function animateScare(dt){
     if (rand() < 0.5){ const y = rand()*780|0, hh = 8 + rand()*50|0, off = (rand() - .5)*80; scareCtx.drawImage(scareCv, 0, y, 512, hh, off, y, 512, hh); }
   }
   scareCv.style.filter = rand() < 0.1 ? 'invert(1) contrast(1.6)' : rand() < 0.15 ? 'brightness(2.2) contrast(1.8)' : 'contrast(1.4)';
+  // it lunges from the dark into the lens, then thrashes
+  const k = Math.min(1, state.scareT/0.22), e = 1 - Math.pow(1 - k, 3);
+  const sc = 0.4 + e*0.8 + Math.max(0, state.scareT - 0.22)*0.18;
+  const jit = 6 + 26*e, snap = state.scareT > 0.4 && rand() < 0.12 ? (rand() - 0.5)*0.6 : 0;
+  scareCv.style.transform = `translate(${(rand() - 0.5)*jit}px, ${(rand() - 0.5)*jit*0.8}px) scale(${sc}) rotate(${(rand() - 0.5)*0.07 + snap}rad)`;
 }
 function catchPlayer(){
   if (creature) creature.setMouth(true);
@@ -2510,6 +2645,7 @@ function frame(now){
     if (state.mode === 'play') updateCreature(dt);
     if (state.mode === 'play') updateRunner(dt);
     if (state.mode === 'play') updateProps(dt);
+    updateFlash(dt);
     if (state.mode === 'play') updateAudio(dt);
     if (!mapView.hidden){ mapT -= dt; if (mapT <= 0){ mapT = 0.2; drawMap(); } }
     if (msgT > 0){ msgT -= dt; if (msgT <= 0) $('msg').style.opacity = 0; }
@@ -2522,7 +2658,9 @@ function frame(now){
     camera.position.set(P.x + (rand() - .5)*0.06, P.y + P.eye + (rand() - .5)*0.06, P.z);
     animateScare(dt);
   }
-  renderer.render(scene, camera);
+  state.danger = Math.max(0, (state.danger || 0) - dt*0.6);
+  renderFrame(now/1000);
+  if (!$('cam').hidden) updateCamTs();
   requestAnimationFrame(frame);
 }
 function boot(){
