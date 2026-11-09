@@ -55,6 +55,13 @@ html,body{height:100%;margin:0;background:var(--void);color:var(--bone);overflow
 #mapView{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;pointer-events:none;width:min(720px,calc(100vw - 32px));display:flex;flex-direction:column;gap:6px;align-items:center}
 #mapCv{width:100%;height:auto;display:block}
 #mapView .mapHint{font-size:12px;letter-spacing:.16em;color:var(--ash);text-transform:uppercase}
+#prompt{position:absolute;left:50%;top:58%;transform:translateX(-50%);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--bone);text-shadow:0 1px 4px #000;white-space:nowrap}
+#slats{position:fixed;inset:0;pointer-events:none;z-index:4;background:repeating-linear-gradient(180deg,rgba(8,6,4,.97) 0 7vh,rgba(8,6,4,0) 7vh 10vh),radial-gradient(ellipse at center,rgba(0,0,0,0) 30%,rgba(0,0,0,.92) 80%)}
+#note{position:fixed;inset:0;z-index:15;display:flex;align-items:center;justify-content:center;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:rgba(0,0,0,.55);cursor:pointer}
+#note .paper{width:min(520px,100%);background:#d8ceb0;color:#2a2018;padding:26px 28px;font-family:var(--body);font-size:17px;line-height:1.6;box-shadow:0 10px 40px rgba(0,0,0,.6);transform:rotate(-1deg)}
+#note h3{margin:0 0 12px;font-weight:400;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:#6e1a12}
+#note p{margin:0;white-space:pre-line}
+#note .close{margin-top:16px;font-size:12px;letter-spacing:.14em;color:#6a5a44;text-transform:uppercase}
 #hint{position:absolute;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));font-size:12px;letter-spacing:.08em;color:rgba(141,136,122,.8)}
 
 /* Touch controls */
@@ -120,7 +127,8 @@ h2{font-family:var(--display);font-weight:400;margin:0;font-size:clamp(40px,8vw,
   <div class="stam" id="stam"><div id="stamFill"></div></div>
   <div id="noise"><span>NOISE</span><i></i><i></i><i></i></div>
   <div id="inv"></div>
-  <div id="hint">Shift run · C sneak · Q drink · E swing · M map · F light</div>
+  <div id="prompt"></div>
+  <div id="hint">Shift run · C sneak · E use · Click swing · Q drink · M map · F light</div>
 </div>
 
 <div id="touch" hidden>
@@ -128,7 +136,7 @@ h2{font-family:var(--display);font-weight:400;margin:0;font-size:clamp(40px,8vw,
   <button class="tbtn" id="lightBtn" type="button">LIGHT</button>
   <button class="tbtn" id="sneakBtn" type="button">SNEAK</button>
   <button class="tbtn" id="runBtn" type="button">RUN</button>
-  <button class="tbtn" id="swingBtn" type="button">SWING</button>
+  <button class="tbtn" id="swingBtn" type="button">USE</button>
   <button class="tbtn" id="drinkBtn" type="button">DRINK</button>
   <button class="tbtn" id="mapBtn" type="button">MAP</button>
   <button class="tbtn" id="pauseBtn" type="button" aria-label="Pause">II</button>
@@ -144,7 +152,8 @@ h2{font-family:var(--display);font-weight:400;margin:0;font-size:clamp(40px,8vw,
     <b>Shift</b><span>run (loud, it will hear)</span>
     <b>C</b><span>sneak (almost silent)</span>
     <b>Q</b><span>energy drink (burst of speed)</span>
-    <b>E / click</b><span>swing a weapon</span>
+    <b>E</b><span>open doors, hide, read notes</span>
+    <b>Click</b><span>swing a weapon</span>
     <b>M</b><span>map scraps</span>
     <b>F</b><span>flashlight</span>
     <b>Listen</b><span>keys chime; it whirs and clanks</span>
@@ -171,6 +180,8 @@ h2{font-family:var(--display);font-weight:400;margin:0;font-size:clamp(40px,8vw,
   <button class="btn" id="again" type="button">Play again</button>
 </section>
 
+<div id="slats" hidden></div>
+<div id="note" hidden><div class="paper"><h3 id="noteTitle"></h3><p id="noteText"></p><div class="close" id="noteClose">Press E or click to put it down</div></div></div>
 <div id="mapView" hidden><canvas id="mapCv" width="708" height="296"></canvas><div class="mapHint" id="mapHint">Press M to close</div></div>
 
 <div id="scare" hidden><canvas id="scareCv" width="512" height="800"></canvas></div>
@@ -225,6 +236,24 @@ const PROP_CELLS = [
   [0, 21, 18, 21, 19], [1, 15, 3, 19, 3],                   // study bookcase, storage shelving
   [1, 11, 20, 12, 21], [1, 14, 22, 15, 23]                  // cellar barrels, crawlspace boxes
 ];
+// interior doorways that get real, hinged doors: [floor, x0, z0, x1, z1]
+const DOOR_SPOTS = [
+  [0, 4, 10, 5, 10], [0, 14, 10, 15, 10], [0, 25, 10, 26, 10], [0, 10, 4, 10, 5], [0, 20, 6, 20, 7], [0, 5, 13, 6, 13], [0, 23, 13, 24, 13], [0, 12, 18, 12, 19], [0, 20, 20, 20, 21],
+  [1, 5, 15, 6, 15], [1, 15, 15, 16, 15], [1, 23, 13, 24, 13], [1, 6, 18, 7, 18], [1, 17, 18, 18, 18], [1, 11, 8, 11, 9], [1, 21, 6, 21, 7]
+];
+// wardrobes and cupboards you can hide in: [floor, x, z]
+const HIDE_SPOTS = [[0, 1, 9], [0, 21, 9], [0, 26, 14], [0, 13, 22], [0, 11, 23], [1, 2, 14], [1, 31, 12], [1, 12, 23]];
+// the story of Marrow House, scattered on tables and floors: h is the height of the surface it lies on
+const NOTES = [
+  { f:0, x:19.75, z:16.85, h:0.805, title:'Party flyer', text:"MARROW HOUSE SATURDAY PARTIES!\nCake, games, and a very special guest: AYUKIKI, our singing, dancing animatronic friend!\nHe laughs, he plays hide-and-seek, and he never, ever gets tired.\n2 o'clock sharp. Don't be late!" },
+  { f:0, x:5.45, z:6.75, h:0.785, title:'Shopping list', text:"Candles.\nBatteries for the flashlights.\nOil for HIS joints. They squeal all night.\nTell the children to stop leaving the cellar door open. It goes down there to listen to the boiler." },
+  { f:0, x:25.6, z:6.2, h:0.016, title:'Torn diary page', text:"The fire burned out its cameras. Henry says that makes it harmless now, just a blind toy in a hat.\nBut it still finds the children during hide-and-seek. It doesn't look for them. It listens." },
+  { f:0, x:23.7, z:16.7, h:0.79, title:'Typed letter', text:"To whoever buys this house:\nDo not run in the halls. Do not drop things. Close the doors behind you.\nIf you hear it laughing far away, stand still. If you hear it laughing close, get inside a cupboard and hold your breath.\nIt cannot open what it cannot hear.\n- H. Marrow" },
+  { f:0, x:2.4, z:16.6, h:0.016, title:"Child's drawing", text:"he lives in the walls now\nhe says if i hide in the cupboard and stay quiet he cant find me\nthats what he told anna too" },
+  { f:1, x:25.3, z:3.55, h:0.905, title:'Workshop log', text:"Unit 1: laugh box finally works. Gave him the fedora and one white glove. The children adore it.\nThe face skins keep tearing at the seams. I stitch them by hand.\nLast night Unit 1 stood up on its own. I never built legs that could stand." },
+  { f:1, x:6.2, z:21.2, h:0.016, title:'Last page', text:"I smashed it apart with the fire axe. Pieces everywhere.\nIn the morning another one was sitting on the workbench, smiling at me.\nI never built a second one. I never built a third." },
+  { f:1, x:17.2, z:20.6, h:0.016, title:'Scrawled note', text:"Three brass keys open the front door. I hid them around the house so IT could never get out.\nNow I can't get out either.\nIf you are reading this: find the keys. Whatever you do, don't let it hear you." }
+];
 const START = { x:16.5, z:18.5, yaw:0 };
 const SPAWN = { f:1, x:27, z:6 };
 // map scraps each reveal half of one floor
@@ -236,6 +265,8 @@ function makeGrids(){
   for (const [f, , x0, z0, x1, z1] of ROOMS) carve(f, x0, z0, x1, z1, 0);
   for (const [f, x0, z0, x1, z1] of DOORS) carve(f, x0, z0, x1, z1, 0);
   for (const [f, x0, z0, x1, z1] of PROP_CELLS) carve(f, x0, z0, x1, z1, 4);
+  for (const [f, x, z] of HIDE_SPOTS) carve(f, x, z, x, z, 4);
+  for (const [f, x0, z0, x1, z1] of DOOR_SPOTS) carve(f, x0, z0, x1, z1, 5);
   for (const f of [0, 1]) carve(f, STAIR.x0, STAIR.z0, STAIR.x1, STAIR.z1, 3);
   grids[0][EXIT.z][EXIT.x] = 2;
   return grids;
@@ -1078,7 +1109,8 @@ function updateProps(dt){
   if (S.horse) S.horse.rotation.x = P.f === 1 && Math.hypot(P.x - 18, P.z - 22.8) < 6 ? Math.sin(t*2.4)*0.12 : 0;
   // swinging hall bulb
   S.bulb.pivot.rotation.z = Math.sin(t*1.5)*0.28; S.bulb.pivot.rotation.x = Math.sin(t*1.1)*0.12;
-  const bOn = rand() > 0.04; S.bulb.light.intensity = bOn ? 0.6 : 0; S.bulb.mesh.visible = bOn;
+  const hunted = creature && (C.state === 'hunt' || C.state === 'lunge');
+  const bOn = rand() > (hunted ? 0.4 : 0.04); S.bulb.light.intensity = bOn ? 0.6 : 0; S.bulb.mesh.visible = bOn;
   if (S.candles) S.candles.forEach(c => c.scale.setScalar(0.8 + rand()*0.5));
   // TVs switch on when you get close
   for (const tv of S.tvs){
@@ -1237,6 +1269,99 @@ function updateProps(dt){
   if (S.flickerT > 0){ S.flickerT -= dt; if (P.light) flash.intensity = rand() < 0.5 ? rand()*0.3 : 1.2; }
 }
 
+/* ---------- doors, hiding places, notes, blood ---------- */
+const interiorDoorMat = new THREE.MeshPhongMaterial({ shininess:10, map:canvasTex(32, 64, (c, w, h) => { c.fillStyle = '#4a3220'; c.fillRect(0, 0, w, h); c.strokeStyle = '#2a1a0e'; c.lineWidth = 2; c.strokeRect(5, 5, 22, 24); c.strokeRect(5, 35, 22, 24); grime(c, 0, 0, w, h, 150, .35); }) });
+const lintelMat = new THREE.MeshPhongMaterial({ color:0x3e3a2a, shininess:3 });
+const louverMat = new THREE.MeshPhongMaterial({ shininess:8, map:canvasTex(32, 64, (c, w, h) => { c.fillStyle = '#3a2616'; c.fillRect(0, 0, w, h); for (let y = 6; y < h - 4; y += 4){ c.fillStyle = '#120a05'; c.fillRect(4, y, w - 8, 2); } grime(c, 0, 0, w, h, 120, .3); }) });
+const noteMat = new THREE.MeshPhongMaterial({ color:0xe2d8bc, emissive:0x3a3424, shininess:5, side:THREE.DoubleSide });
+const bloodMat = new THREE.MeshPhongMaterial({ transparent:true, depthWrite:false, shininess:60, map:canvasTex(128, 128, (c, w, h) => {
+  c.clearRect(0, 0, w, h);
+  for (let i = 0; i < 14; i++){ const x = 30 + rand()*68, y = 25 + rand()*50, r = 6 + rand()*18; const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, 'rgba(90,6,4,.9)'); g.addColorStop(1, 'rgba(90,6,4,0)'); c.fillStyle = g; c.fillRect(x - r, y - r, r*2, r*2); }
+  c.fillStyle = 'rgba(80,5,3,.85)'; for (let i = 0; i < 9; i++){ const x = 35 + rand()*60; c.fillRect(x, 50 + rand()*20, 2 + rand()*2, 30 + rand()*45); }
+  c.strokeStyle = 'rgba(70,4,2,.8)'; c.lineWidth = 5; for (let i = 0; i < 4; i++){ c.beginPath(); c.moveTo(40 + i*12, 20); c.lineTo(30 + i*14, 90); c.stroke(); }
+}) });
+const dragMat = new THREE.MeshPhongMaterial({ transparent:true, depthWrite:false, shininess:40, map:canvasTex(128, 32, (c, w, h) => {
+  c.clearRect(0, 0, w, h);
+  for (let x = 0; x < w; x += 2){ const a = 0.25 + 0.6*Math.abs(Math.sin(x*0.07)) * (1 - x/w*0.6); c.fillStyle = `rgba(80,6,3,${a})`; c.fillRect(x, 8 + Math.sin(x*0.15)*2, 2, 14 + Math.sin(x*0.3)*3); }
+  for (let i = 0; i < 4; i++){ c.fillStyle = 'rgba(40,2,1,.7)'; c.fillRect(rand()*w, 10 + rand()*12, 6, 1); }
+}) });
+function buildDoors(group){
+  const doors = [], map = {};
+  for (const [f, x0, z0, x1, z1] of DOOR_SPOTS){
+    const horiz = z0 === z1, w = horiz ? x1 - x0 + 1 : z1 - z0 + 1, y = levelY(f);
+    const g = new THREE.Group(); g.position.set(horiz ? x0 + w/2 : x0 + 0.5, y, horiz ? z0 + 0.5 : z0 + w/2); if (!horiz) g.rotation.y = Math.PI/2; group.add(g);
+    const lin = new THREE.Mesh(new THREE.BoxGeometry(w, 0.6, 1), lintelMat); lin.position.y = 2.7; g.add(lin);
+    const np = w >= 2 ? 2 : 1, pw = w/np, panels = [];
+    for (let i = 0; i < np; i++){
+      const side = i === 0 ? -1 : 1, piv = new THREE.Group(); piv.position.x = side*w/2; g.add(piv);
+      const pm = new THREE.Mesh(new THREE.BoxGeometry(pw - 0.02, 2.38, 0.05), interiorDoorMat); pm.position.set(-side*pw/2, 1.2, 0); piv.add(pm);
+      const kn = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.12), brassMat); kn.position.set(-side*(pw - 0.12), 1.05, 0); piv.add(kn);
+      panels.push({ piv, side });
+    }
+    const open = rand() < 0.55;
+    const d = { f, g, panels, cells:[], ang:open ? 1 : 0, target:open ? 1 : 0, fast:false, cx:g.position.x, cz:g.position.z };
+    for (const p of panels) p.piv.rotation.y = p.side*d.ang*1.45;
+    for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++){ d.cells.push([x, z]); map[f + ':' + x + ':' + z] = d; }
+    doors.push(d);
+  }
+  return { doors, map };
+}
+function buildHides(group, grids){
+  const out = [];
+  for (const [f, x, z] of HIDE_SPOTS){
+    let dir = null;
+    for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]){
+      if (grids[f][z + dz]?.[x + dx] !== 0) continue;
+      const roomy = grids[f][z + 2*dz]?.[x + 2*dx] === 0;
+      if (!dir || roomy){ dir = [dx, dz]; if (roomy) break; }
+    }
+    if (!dir) continue;
+    const [dx, dz] = dir, y = levelY(f);
+    const g = new THREE.Group(); g.position.set(x + 0.5, y, z + 0.5); g.rotation.y = Math.atan2(dx, dz); group.add(g);
+    const box = (w, h, d, px, py, pz, m, parent = g) => { const me = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); me.position.set(px, py, pz); parent.add(me); return me; };
+    box(0.92, 2.1, 0.05, 0, 1.05, -0.43, woodMat); box(0.05, 2.1, 0.9, -0.45, 1.05, 0, woodMat); box(0.05, 2.1, 0.9, 0.45, 1.05, 0, woodMat);
+    box(0.95, 0.06, 0.95, 0, 2.13, 0, woodMat); box(0.9, 0.05, 0.9, 0, 0.03, 0, woodMat);
+    const front = new THREE.Group(); g.add(front);
+    box(0.44, 2.04, 0.04, -0.225, 1.05, 0.44, louverMat, front); box(0.44, 2.04, 0.04, 0.225, 1.05, 0.44, louverMat, front);
+    box(0.03, 0.12, 0.05, -0.04, 1.1, 0.47, brassMat, front); box(0.03, 0.12, 0.05, 0.04, 1.1, 0.47, brassMat, front);
+    out.push({ f, x, z, cx:x + 0.5, cz:z + 0.5, fx:x + 0.5 + dx, fz:z + 0.5 + dz, yaw:Math.atan2(-dx, -dz), front, g });
+  }
+  return out;
+}
+function buildNotes(group){
+  return NOTES.map(n => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.28), noteMat);
+    m.rotation.set(-Math.PI/2, 0, rand()*0.8 - 0.4); m.position.set(n.x, levelY(n.f) + n.h, n.z); group.add(m);
+    return Object.assign({ m, read:false }, n);
+  });
+}
+function buildGore(group, grids){
+  // drag marks leading away from the boarded doors
+  for (const [f, x, z, a] of [[0, 25.2, 22.5, 0], [0, 2.9, 11.5, 0], [1, 23.6, 18.4, Math.PI/2], [1, 3.8, 8.5, 0]]){
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.45), dragMat); m.rotation.set(-Math.PI/2, 0, a); m.position.set(x, levelY(f) + 0.016, z); group.add(m);
+  }
+  // smears on the walls
+  for (const f of [0, 1]){
+    const gr = grids[f], cand = [];
+    for (let z = 1; z < H - 1; z++) for (let x = 1; x < W - 1; x++){
+      if (gr[z][x] !== 0) continue;
+      for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (gr[z + b][x + a] === 1) cand.push([x, z, a, b]);
+    }
+    for (let i = 0; i < 5 && cand.length; i++){
+      const [x, z, a, b] = cand.splice(Math.floor(rand()*cand.length), 1)[0];
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), bloodMat);
+      m.position.set(x + 0.5 + a*0.485, levelY(f) + 0.7 + rand()*0.9, z + 0.5 + b*0.485); m.rotation.y = Math.atan2(-a, -b); m.rotation.z = rand()*Math.PI*2; group.add(m);
+    }
+  }
+}
+function updateDoors(dt){
+  for (const d of L.doors){
+    if (Math.abs(d.ang - d.target) < 0.002) continue;
+    d.ang += (d.target - d.ang)*Math.min(1, dt*(d.fast ? 16 : 5));
+    for (const p of d.panels) p.piv.rotation.y = p.side*d.ang*1.45;
+  }
+}
+
 /* ---------- level build ---------- */
 const wallMatG = new THREE.MeshPhongMaterial({ map:wallTexG, shininess:3 });
 const wallMatB = new THREE.MeshPhongMaterial({ map:wallTexB, shininess:3 });
@@ -1370,6 +1495,8 @@ function buildLevel(){
     }
   }
   const props = buildProps(group);
+  const dm = buildDoors(group), hides = buildHides(group, grids), notes = buildNotes(group);
+  buildGore(group, grids);
   // pickups: one per room, alternating floors, skipping the starting foyer and filling rooms with keys last
   const roomsFor = f => ROOMS.filter(r => r[0] === f && !['hallway', 'corridor', 'landing', 'foyer'].includes(r[1])).sort(() => rand() - 0.5);
   const hasKey = r => picks.some(([f, x, z]) => f === r[0] && x >= r[2] && x <= r[4] && z >= r[3] && z <= r[5]);
@@ -1395,14 +1522,27 @@ function buildLevel(){
     mesh.position.set(best.x + 0.5, levelY(f) + 0.55, best.z + 0.5); group.add(mesh);
     items.push({ kind, arg, f, x:best.x + 0.5, z:best.z + 0.5, y:levelY(f), mesh, taken:false });
   });
-  L = { grids, group, door, daylight, exitLight, keys, bulb, items, props };
+  L = { grids, group, door, daylight, exitLight, keys, bulb, items, props, doors:dm.doors, doorMap:dm.map, hides, notes };
 }
 
 /* ---------- grid queries ---------- */
 function cellAt(f, x, z){ return (x < 0 || z < 0 || x >= W || z >= H) ? 1 : L.grids[f][z][x]; }
-const playerSolid = f => (x, z) => { const v = cellAt(f, x, z); return v === 1 || v === 4 || (v === 2 && !state.exitOpen); };
-const cPass = (f, x, z) => { const v = cellAt(f, x, z); return v === 0 || v === 3; };
-const creatureSolid = f => (x, z) => !cPass(f, x, z);
+const playerSolid = f => (x, z) => { const v = cellAt(f, x, z); return v === 1 || v === 4 || (v === 5 && doorShut(f, x, z)) || (v === 2 && !state.exitOpen); };
+const doorAt = (f, x, z) => L.doorMap[f + ':' + x + ':' + z];
+const doorShut = (f, x, z) => { const d = doorAt(f, x, z); return !!d && d.ang < 0.6; };
+const cPass = (f, x, z) => { const v = cellAt(f, x, z); return v === 0 || v === 3 || v === 5; };
+const creatureSolid = f => (x, z) => !cPass(f, x, z) || (cellAt(f, x, z) === 5 && doorShut(f, x, z));
+// a closed door between you and it muffles what it hears
+function shutBetween(f, x0, z0, x1, z1){
+  const dx = x1 - x0, dz = z1 - z0, n = Math.ceil(Math.hypot(dx, dz)/0.3);
+  for (let i = 1; i < n; i++){ const x = Math.floor(x0 + dx*i/n), z = Math.floor(z0 + dz*i/n); if (cellAt(f, x, z) === 5 && doorShut(f, x, z)) return true; }
+  return false;
+}
+function seeLine(f, x0, z0, x1, z1){
+  const dx = x1 - x0, dz = z1 - z0, n = Math.ceil(Math.hypot(dx, dz)/0.2);
+  for (let i = 1; i < n; i++){ const x = Math.floor(x0 + dx*i/n), z = Math.floor(z0 + dz*i/n), v = cellAt(f, x, z); if (!(v === 0 || v === 3 || (v === 5 && !doorShut(f, x, z)))) return false; }
+  return true;
+}
 function settle(o){
   if (isStair(Math.floor(o.x), Math.floor(o.z))){ o.y = stairY(o.z); o.f = o.y > -2 ? 0 : 1; }
   else o.y = levelY(o.f);
@@ -1470,6 +1610,15 @@ function initAudio(){
     const vgain = ctx.createGain(); vgain.gain.value = 0.45; A.verb.connect(vgain); vgain.connect(A.master);
     A.dry = ctx.createGain(); A.dry.connect(A.master); A.dry.connect(A.verb);
     A.cPan = makePanner(); A.cPan.connect(A.master); A.cPan.connect(A.verb);
+    // a dissonant string-like drone that swells while it hunts you
+    A.dread = ctx.createGain(); A.dread.gain.value = 0; A.dread.connect(A.master);
+    const dlp = ctx.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 1100; dlp.connect(A.dread);
+    for (const f of [220, 233.1, 311.1, 329.6, 110]){
+      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f*(1 + (rand() - 0.5)*0.004);
+      const tg = ctx.createGain(); tg.gain.value = 0.22; const tl = ctx.createOscillator(); tl.frequency.value = 5 + rand()*3;
+      const tlg = ctx.createGain(); tlg.gain.value = 0.18; tl.connect(tlg); tlg.connect(tg.gain);
+      o.connect(tg); tg.connect(dlp); o.start(); tl.start();
+    }
     A.rPan = makePanner(); A.rPan.connect(A.master); A.rPan.connect(A.verb);
     A.keyPans = [0, 1, 2].map(() => { const p = makePanner(); p.connect(A.master); return p; });
     // the animatronic's motors: a filtered buzz that rises with its speed
@@ -1482,6 +1631,7 @@ function initAudio(){
     A.crush = crush;
   } catch(e){ A.ctx = null; }
 }
+function muteDread(){ if (A.dread){ A.dread.gain.cancelScheduledValues(0); A.dread.gain.value = 0; } }
 function makePanner(){
   const p = A.ctx.createPanner(); p.panningModel = 'HRTF'; p.distanceModel = 'inverse';
   p.refDistance = 2; p.rolloffFactor = 1.6; p.maxDistance = 60; return p;
@@ -1596,6 +1746,7 @@ const sfx = {
       hee(dest, w + .5, { dur:.75, f0:f0*.55, rise:1.1, fall:.6, peak:.8*loud });
     }
   },
+  breath: v => { noiseHit(A.master, { f:800, q:.7, peak:.09*v, a:.4, dec:.5 }); noiseHit(A.master, { f:520, q:.7, peak:.11*v, a:.15, dec:.8, when:1.0 }); },
   heart: v => { tone(A.master, { f:60, f2:38, peak:.25 + v*.4, dec:.15 }); tone(A.master, { f:54, f2:36, peak:.18 + v*.3, dec:.15, when:.19 }); },
   door: () => { tone(A.master, { f:180, f2:70, type:'square', peak:.12, dec:1.1, lp:500 }); noiseHit(A.master, { f:300, q:.8, peak:.35, dec:.4, type:'lowpass' }); },
   scream: () => {
@@ -1613,8 +1764,8 @@ const sfx = {
 };
 
 /* ---------- state & input ---------- */
-const state = { mode:'title', keys:0, exitOpen:false, time:0, grace:0, scareT:0, kills:0, explore:false };
-const P = { x:0, z:0, y:0, f:0, yaw:0, pitch:0, eye:1.6, stam:100, lock:false, running:false, moving:false, sneak:false, noise:0, bob:0, stepT:0, light:true, drinks:0, weapon:null, maps:new Set(), boostT:0, swingCD:0, swingT:0 };
+const state = { mode:'title', keys:0, exitOpen:false, time:0, grace:0, scareT:0, kills:0, explore:false, notes:0 };
+const P = { x:0, z:0, y:0, f:0, yaw:0, pitch:0, eye:1.6, stam:100, lock:false, running:false, moving:false, sneak:false, noise:0, bob:0, stepT:0, light:true, drinks:0, weapon:null, maps:new Set(), boostT:0, swingCD:0, swingT:0, hidden:null, reading:null, breathT:0 };
 const C = { x:0, z:0, y:0, f:1, face:0, path:[], state:'crawl', target:null, timer:0, speed:0, standB:0, phase:0, headYaw:0, headTarget:0, lookT:0,
   tilt:0, tiltT:0, hearCD:0, stepT:0, jerkT:0, jerkFast:true, sublT:3, reach:0, idleT:12, upright:false };
 const K = {};
@@ -1628,7 +1779,8 @@ addEventListener('keydown', e => {
     if (e.code === 'KeyF') toggleLight();
     if (e.code === 'KeyC') toggleSneak();
     if (e.code === 'KeyQ') drink();
-    if (e.code === 'KeyE') swing();
+    if (e.code === 'KeyE') interact();
+    if (e.code === 'Escape' && P.reading) closeNote();
     if (e.code === 'KeyM') toggleMap();
     if ((e.code === 'Escape' || e.code === 'KeyP') && !document.pointerLockElement) pause();
   }
@@ -1643,7 +1795,7 @@ document.addEventListener('mousemove', e => {
   if (document.pointerLockElement === cv) turn(e.movementX, e.movementY, 0.0022);
   else if (dragging) turn(e.movementX, e.movementY, 0.004);
 });
-cv.addEventListener('mousedown', () => { if (state.mode !== 'play') return; if (document.pointerLockElement === cv) swing(); else { dragging = true; lockPointer(); } });
+cv.addEventListener('mousedown', () => { if (state.mode !== 'play') return; if (document.pointerLockElement === cv){ if (P.reading) closeNote(); else swing(); } else { dragging = true; lockPointer(); } });
 addEventListener('mouseup', () => { dragging = false; });
 function lockPointer(){
   if (isTouch) return;
@@ -1688,7 +1840,8 @@ const runBtn = $('runBtn');
 runBtn.addEventListener('touchstart', e => { e.preventDefault(); runHeld = true; runBtn.classList.add('on'); }, { passive:false });
 runBtn.addEventListener('touchend', e => { e.preventDefault(); runHeld = false; runBtn.classList.remove('on'); }, { passive:false });
 $('sneakBtn').addEventListener('click', toggleSneak);
-$('swingBtn').addEventListener('click', () => swing());
+$('swingBtn').addEventListener('click', () => interact());
+$('note').addEventListener('click', () => closeNote());
 $('drinkBtn').addEventListener('click', () => drink());
 $('mapBtn').addEventListener('click', () => toggleMap());
 $('lightBtn').addEventListener('click', toggleLight);
@@ -1705,7 +1858,7 @@ let msgT = 0;
 function say(text, dur = 3){ const m = $('msg'); m.textContent = text; m.style.opacity = 1; msgT = dur; }
 if (isTouch){
   $('hint').hidden = true;
-  $('controls').innerHTML = '<b>Left thumb</b><span>walk</span><b>Right thumb</b><span>look</span><b>RUN</b><span>hold to run (loud, it will hear)</span><b>SNEAK</b><span>tap to move almost silently</span><b>DRINK</b><span>energy drink, burst of speed</span><b>SWING</b><span>hit it with a weapon</span><b>MAP</b><span>map scraps you found</span>';
+  $('controls').innerHTML = '<b>Left thumb</b><span>walk</span><b>Right thumb</b><span>look</span><b>RUN</b><span>hold to run (loud, it will hear)</span><b>SNEAK</b><span>tap to move almost silently</span><b>DRINK</b><span>energy drink, burst of speed</span><b>USE</b><span>doors, hiding, notes, or swing a weapon</span><b>MAP</b><span>map scraps you found</span>';
   $('mapHint').textContent = 'Tap MAP to close';
 }
 function showBest(){ const b = getBest(); $('bestTitle').textContent = b ? 'Best escape: ' + fmt(b) : ''; }
@@ -1728,6 +1881,7 @@ function renderInv(){
   if (P.drinks) parts.push(`Drinks <b>${P.drinks}</b>`);
   if (P.weapon) parts.push(`<b>${P.weapon.name}</b>`);
   if (P.maps.size) parts.push(`Map <b>${P.maps.size}/4</b>`);
+  if (state.notes) parts.push(`Notes <b>${state.notes}/${NOTES.length}</b>`);
   $('inv').innerHTML = parts.join(' · ');
 }
 const mapView = $('mapView'), mapCv = $('mapCv'), mctx = mapCv.getContext('2d');
@@ -1759,6 +1913,7 @@ function drawMap(){
         const v = L.grids[f][z][x], px = ox + x*MCS, pz = oy + z*MCS;
         if (v === 1){ mctx.fillStyle = '#3a2f22'; mctx.fillRect(px, pz, MCS, MCS); }
         else if (v === 4){ mctx.fillStyle = '#9a8a6c'; mctx.fillRect(px + 1, pz + 1, MCS - 2, MCS - 2); }
+        else if (v === 5){ mctx.fillStyle = '#6b4a2a'; mctx.fillRect(px + 2, pz + 3, MCS - 4, MCS - 6); }
         else if (v === 3){ mctx.fillStyle = '#a89878'; mctx.fillRect(px, pz, MCS, MCS); mctx.fillStyle = '#3a2f22'; mctx.fillRect(px, pz + (z % 2)*5, MCS, 1); }
         else if (v === 2){ mctx.fillStyle = '#b8281f'; mctx.fillRect(px, pz, MCS, MCS); }
       }
@@ -1788,7 +1943,7 @@ function newGame(){
   buildLevel();
   state.keys = 0; state.exitOpen = false; state.time = 0; state.grace = 8; state.kills = 0;
   Object.assign(P, { x:START.x, z:START.z, f:0, y:0, yaw:START.yaw, pitch:0, eye:1.6, stam:100, lock:false, sneak:false, noise:0, light:true,
-    drinks:0, weapon:null, maps:new Set(), boostT:0, swingCD:0, swingT:0 });
+    drinks:0, weapon:null, maps:new Set(), boostT:0, swingCD:0, swingT:0, hidden:null, reading:null, breathT:0 });
   flash.visible = true; $('sneakBtn').classList.remove('on');
   camera.fov = 72; camera.updateProjectionMatrix();
   if (creature && C.state === 'dead'){ corpses.push(creature); creature = null; }
@@ -1801,6 +1956,7 @@ function newGame(){
   creature.g.position.set(C.x, C.y, C.z);
   Object.assign(RUN, { active:false, cd:25 + rand()*15 }); runner.g.visible = false;
   mapView.hidden = true;
+  state.notes = 0; $('slats').hidden = true; $('note').hidden = true; setPrompt('');
   showHeld(); renderInv(); renderKeys(); lastStatus = '';
 }
 function startPlay(explore){
@@ -1821,6 +1977,7 @@ function pause(){
   state.mode = 'pause'; show('pause'); touchEl.hidden = true;
   runHeld = false; stick.id = look.id = null; stick.x = stick.y = 0; base.style.display = 'none';
   if (A.servoG) A.servoG.gain.value = 0;
+  muteDread();
 }
 function resume(){
   if (state.mode !== 'pause') return;
@@ -1832,11 +1989,12 @@ function endGame(won){
   try { if (document.exitPointerLock) document.exitPointerLock(); } catch(e){}
   touchEl.hidden = true; runHeld = false;
   drawGrain(0); $('redpulse').style.opacity = 0; clearFlash(); mapView.hidden = true; if (L && L.props) stopPropAudio(L.props);
+  $('slats').hidden = true; $('note').hidden = true; setPrompt(''); muteDread();
   if (A.servoG) A.servoG.gain.value = 0;
   if (won){
     const b = getBest(), best = !b || state.time < b;
     if (best) setBest(state.time);
-    $('winStat').innerHTML = `Time <b>${fmt(state.time)}</b>${best ? ' · new best' : ' · best <b>' + fmt(b) + '</b>'}` + (state.kills ? ` · destroyed <b>${state.kills}</b>` : '');
+    $('winStat').innerHTML = `Time <b>${fmt(state.time)}</b>${best ? ' · new best' : ' · best <b>' + fmt(b) + '</b>'}` + (state.kills ? ` · destroyed <b>${state.kills}</b>` : '') + ` · notes <b>${state.notes}/${NOTES.length}</b>`;
     $('hud').hidden = true; show('win'); showBest();
   } else {
     state.scareT = 0; sfx.heehee(A.dry, 1.8, 0); setTimeout(sfx.scream, 650); $('scare').hidden = false;
@@ -1852,6 +2010,7 @@ function quitToTitle(){
   state.explore = false; setLights(false);
   $('hud').hidden = true; touchEl.hidden = true; mapView.hidden = true; drawGrain(0); $('redpulse').style.opacity = 0; clearFlash();
   if (A.servoG) A.servoG.gain.value = 0;
+  muteDread();
   newGame(); creature.g.visible = true; state.mode = 'title'; show('title');
 }
 $('retry').addEventListener('click', () => startPlay(false));
@@ -1876,11 +2035,89 @@ function swing(){
   }
   makeNoise(5);
 }
+let promptTxt = null;
+function setPrompt(t){ if (t !== promptTxt){ promptTxt = t; $('prompt').textContent = t; } }
+const USE = () => isTouch ? 'USE · ' : 'E · ';
+function nearestInteract(){
+  if (!L) return null;
+  const va = Math.atan2(-Math.sin(P.yaw), -Math.cos(P.yaw));
+  let best = null;
+  const consider = (x, z, f, r, obj) => {
+    if (f !== P.f) return;
+    const d = Math.hypot(x - P.x, z - P.z); if (d > r) return;
+    if (d > 0.6 && Math.abs(wrapA(Math.atan2(x - P.x, z - P.z) - va)) > 1.0) return;
+    if (!best || d < best.d) best = Object.assign({ d }, obj);
+  };
+  for (const n of L.notes) consider(n.x, n.z, n.f, 1.6, { kind:'note', obj:n, label:USE() + 'read' });
+  for (const h of L.hides) consider(h.cx, h.cz, h.f, 1.45, { kind:'hide', obj:h, label:USE() + 'hide inside' });
+  for (const d of L.doors) consider(d.cx, d.cz, d.f, 1.7, { kind:'door', obj:d, label:USE() + (d.target > 0.5 ? 'close door' : 'open door') });
+  return best;
+}
+function interact(){
+  if (state.mode !== 'play') return;
+  if (P.reading){ closeNote(); return; }
+  if (P.hidden){ unhide(); return; }
+  const it = nearestInteract();
+  if (!it){ swing(); return; }
+  if (it.kind === 'note') openNote(it.obj);
+  else if (it.kind === 'hide') hideIn(it.obj);
+  else toggleDoor(it.obj);
+}
+function toggleDoor(d){
+  const y = levelY(d.f) + 1;
+  if (d.target > 0.5){
+    const inCell = (x, z, ox, oz) => Math.floor(ox) === x && Math.floor(oz) === z;
+    if (d.cells.some(([x, z]) => inCell(x, z, P.x, P.z) || (creature && C.f === d.f && inCell(x, z, C.x, C.z)))) return;
+    d.target = 0;
+    if (A.ctx){ hsfx.creak(fxPan(d.cx, y, d.cz)); setTimeout(() => { if (A.ctx) hsfx.thud(fxPan(d.cx, y, d.cz)); }, 380); }
+  } else {
+    d.target = 1; if (A.ctx) hsfx.creak(fxPan(d.cx, y, d.cz));
+  }
+  d.fast = false;
+  makeNoise(P.sneak ? 1.5 : 3.5);
+}
+function openNote(n){
+  P.reading = n; $('noteTitle').textContent = n.title; $('noteText').textContent = n.text; $('note').hidden = false;
+  if (!n.read){ n.read = true; state.notes++; renderInv(); }
+  if (A.ctx) noiseHit(A.master, { f:3000, q:.6, type:'highpass', peak:.12, dec:.15 });
+}
+function closeNote(){ P.reading = null; $('note').hidden = true; }
+function hideIn(h){
+  P.hidden = h; if (P.sneak) toggleSneak();
+  h.front.visible = false; $('slats').hidden = false; held.visible = false;
+  P.x = h.cx; P.z = h.cz; P.yaw = h.yaw; P.pitch = -0.05;
+  if (A.ctx) hsfx.creak(fxPan(h.cx, levelY(h.f) + 1, h.cz));
+  makeNoise(2.2);
+  say('Hold still. Breathe quietly.', 2.5);
+}
+function unhide(){
+  const h = P.hidden; P.hidden = null; h.front.visible = true; $('slats').hidden = true; held.visible = true;
+  P.x = h.fx; P.z = h.fz; settle(P);
+  if (A.ctx) hsfx.creak(fxPan(h.cx, levelY(h.f) + 1, h.cz));
+  makeNoise(2.2);
+}
+function updateHidden(dt){
+  const h = P.hidden;
+  P.moving = false; P.running = false; P.noise = 0;
+  P.stam = Math.min(100, P.stam + 26*dt); if (P.lock && P.stam > 25) P.lock = false;
+  P.yaw = h.yaw + clamp(wrapA(P.yaw - h.yaw), -0.7, 0.7); P.pitch = clamp(P.pitch, -0.4, 0.3);
+  camera.position.set(h.cx, levelY(h.f) + 1.45, h.cz); camera.rotation.set(P.pitch, P.yaw, 0);
+  if (Math.abs(camera.fov - 72) > 0.05){ camera.fov = 72; camera.updateProjectionMatrix(); }
+  const alive = creature && C.state !== 'gone' && C.state !== 'dead';
+  const near = alive ? clamp(1 - (Math.hypot(P.x - C.x, P.z - C.z) + Math.abs(P.y - C.y)*2)/8, 0, 1) : 0;
+  P.breathT -= dt;
+  if (P.breathT <= 0){ P.breathT = 2.6 - near*1.3; if (A.ctx) sfx.breath(0.35 + near*0.65); }
+  setPrompt(USE() + 'get out');
+  updateHud();
+}
 function updatePlayer(dt){
+  updateDoors(dt);
+  if (P.hidden){ updateHidden(dt); return; }
   let f = 0, s = 0;
   if (K.KeyW || K.ArrowUp) f += 1; if (K.KeyS || K.ArrowDown) f -= 1;
   if (K.KeyD || K.ArrowRight) s += 1; if (K.KeyA || K.ArrowLeft) s -= 1;
   f -= stick.y; s += stick.x;
+  if (P.reading){ f = 0; s = 0; }
   const len = Math.hypot(f, s); if (len > 1){ f /= len; s /= len; }
   const amt = Math.min(1, len);
   P.moving = amt > 0.1;
@@ -1907,6 +2144,7 @@ function updatePlayer(dt){
   P.eye += ((P.sneak ? 1.0 : 1.6) - P.eye)*Math.min(1, dt*8);
   camera.position.set(P.x, P.y + P.eye + (P.moving ? Math.sin(P.bob)*(P.sneak ? 0.02 : 0.05)*amt : 0), P.z);
   camera.rotation.set(P.pitch, P.yaw, 0);
+  const near = nearestInteract(); setPrompt(P.reading ? '' : near ? near.label : '');
   // weapon swing
   P.swingCD = Math.max(0, P.swingCD - dt); P.swingT = Math.max(0, P.swingT - dt);
   const sw = P.swingT > 0 ? Math.sin((1 - P.swingT/0.35)*Math.PI)*1.4 : 0;
@@ -1966,7 +2204,11 @@ function hearAt(x, z, f, far){
   if (!far && d < 3 && dy < 1.5){ C.state = 'lunge'; C.timer = 0.9; C.path = []; }
   else {
     C.state = 'hunt';
-    C.path = findPath({ f:C.f, x:Math.floor(C.x), z:Math.floor(C.z) }, { f, x:Math.floor(x), z:Math.floor(z) });
+    let tx = Math.floor(x), tz = Math.floor(z);
+    const hs = L.hides.find(h => h.f === f && h.x === tx && h.z === tz);
+    if (hs){ tx = Math.floor(hs.fx); tz = Math.floor(hs.fz); }
+    else if (!cPass(f, tx, tz)){ const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([a, b]) => cPass(f, tx + a, tz + b)); if (nb){ tx += nb[0]; tz += nb[1]; } }
+    C.path = findPath({ f:C.f, x:Math.floor(C.x), z:Math.floor(C.z) }, { f, x:tx, z:tz });
   }
   if (wasCalm){ sfx.alert(); if (rand() < 0.75) sfx.heehee(); }
 }
@@ -1978,7 +2220,17 @@ function cMoveToward(tx, tz, speed, dt){
 }
 function followPath(spd, dt){
   if (!C.path.length) return;
-  const [, x, z] = C.path[0];
+  const [pf, x, z] = C.path[0];
+  if (cellAt(pf, x, z) === 5){
+    const d = doorAt(pf, x, z);
+    if (d && d.target < 1){
+      // a closed door stops it: it rattles the handle, then bangs it open
+      if (!(C.doorT > 0)){ C.doorT = 0.9; if (A.ctx) hsfx.rattle(fxPan(d.cx, levelY(pf) + 1, d.cz)); }
+      C.doorT -= dt; C.face = Math.atan2(x + 0.5 - C.x, z + 0.5 - C.z); C.speed = 0;
+      if (C.doorT <= 0){ d.target = 1; d.fast = true; C.doorT = 0; if (A.ctx) hsfx.bang(fxPan(d.cx, levelY(pf) + 1, d.cz)); }
+      return;
+    }
+  }
   if (cMoveToward(x + 0.5, z + 0.5, spd, dt)) C.path.shift();
 }
 function pickWander(){
@@ -1990,6 +2242,14 @@ function pickWander(){
     if (p.length) return p;
   }
   return [];
+}
+// if it tracked a sound to where you're hiding, it stops right outside and listens
+function trySearch(){
+  const h = P.hidden;
+  if (!h || !C.target || h.f !== C.f || Math.hypot(C.target.x - h.cx, C.target.z - h.cz) > 2.2 || Math.hypot(C.x - h.cx, C.z - h.cz) > 2.0) return false;
+  C.state = 'search'; C.timer = 3 + rand()*2; C.path = []; C.face = Math.atan2(h.cx - C.x, h.cz - C.z);
+  C.headTarget = 0; C.lookT = 5; if (A.ctx) sfx.alert();
+  return true;
 }
 function listen(t){ C.state = 'listen'; C.timer = t; C.path = []; }
 function killCreature(){
@@ -2050,7 +2310,7 @@ function updateCreature(dt){
   C.hearCD -= dt;
   if (C.hearCD <= 0){
     C.hearCD = 0.2;
-    if (P.noise > 0 && hearDist(P.x, P.y, P.z) < P.noise) hearAt(P.x, P.z, P.f);
+    if (P.noise > 0 && hearDist(P.x, P.y, P.z) < P.noise*(C.f === P.f && shutBetween(P.f, C.x, C.z, P.x, P.z) ? 0.55 : 1)) hearAt(P.x, P.z, P.f);
   }
   if (C.state === 'crawl'){
     C.speed = C.upright ? 1.2 : 1.5;
@@ -2063,13 +2323,20 @@ function updateCreature(dt){
     if (C.jerkT <= 0){ C.jerkFast = !C.jerkFast; C.jerkT = C.jerkFast ? 0.35 + rand()*0.2 : 0.1 + rand()*0.12; }
     C.speed = (3.2 + state.keys*0.3)*(C.jerkFast ? 1.3 : 0.15);
     followPath(C.speed, dt);
-    if (!C.path.length) listen(3.5 + rand()*2);
+    if (!C.path.length && !trySearch()) listen(3.5 + rand()*2);
   } else if (C.state === 'lunge'){
     C.speed = 6;
     cMoveToward(C.target.x, C.target.z, C.speed, dt);
     collide(C, 0.3, creatureSolid(C.f));
     C.timer -= dt;
-    if (C.timer <= 0 || Math.hypot(C.target.x - C.x, C.target.z - C.z) < 0.15) listen(3 + rand()*1.5);
+    if ((C.timer <= 0 || Math.hypot(C.target.x - C.x, C.target.z - C.z) < 0.15) && !trySearch()) listen(3 + rand()*1.5);
+  } else if (C.state === 'search'){
+    // it stands at your hiding place, listening
+    C.timer -= dt;
+    if (C.timer <= 0){
+      if (P.hidden && Math.hypot(C.x - P.hidden.cx, C.z - P.hidden.cz) < 2.3 && rand() < 0.35){ P.hidden.front.visible = true; catchPlayer(); return; }
+      listen(2 + rand()*2);
+    }
   } else {
     C.timer -= dt;
     if (C.timer <= 0){ C.state = 'crawl'; C.path = []; }
@@ -2078,7 +2345,9 @@ function updateCreature(dt){
   // it only finds you by touch: crawling into you, or you walking into it
   const reachF = 0.6*(1 - C.standB) + 0.15;
   const fx = C.x + Math.sin(C.face)*reachF, fz = C.z + Math.cos(C.face)*reachF;
-  if (Math.abs(P.y - C.y) < 1.2){
+  if (P.hidden){
+    if (C.state === 'hunt' || C.state === 'lunge') trySearch();
+  } else if (Math.abs(P.y - C.y) < 1.2){
     const dFront = Math.hypot(P.x - fx, P.z - fz), dBody = Math.hypot(P.x - C.x, P.z - C.z);
     if ((C.speed > 0.3 && (dFront < 0.6 || dBody < 0.55)) || dBody < 0.4){ catchPlayer(); return; }
   }
@@ -2089,7 +2358,7 @@ function animateCreature(dt){
   const g = cr.g;
   g.position.set(C.x, C.y, C.z);
   g.rotation.y += wrapA(C.face - g.rotation.y)*Math.min(1, dt*7);
-  C.standB += ((C.state === 'listen' || (C.state === 'crawl' && C.upright) ? 1 : 0) - C.standB)*Math.min(1, dt*2.2);
+  C.standB += ((C.state === 'listen' || C.state === 'search' || (C.state === 'crawl' && C.upright) ? 1 : 0) - C.standB)*Math.min(1, dt*2.2);
   C.reach += ((C.state === 'hunt' || C.state === 'lunge' ? 1 : 0) - C.reach)*Math.min(1, dt*4);
   C.phase += dt*(C.speed > 0.1 ? C.speed*3 : 0);
   poseCreature(C.standB, C.phase, C.speed > 0.1, C.reach*(1 - C.standB), cr);
@@ -2106,7 +2375,7 @@ function animateCreature(dt){
   if (C.tiltT <= 0){ C.tiltT = 0.3 + rand()*1.8; C.tilt = (rand() - .5)*(C.state === 'hunt' ? 1.4 : 0.9); }
   cr.head.rotation.z += (C.tilt - cr.head.rotation.z)*Math.min(1, dt*16);
   cr.hair.forEach((h, i) => { h.rotation.x = Math.sin(state.time*3 + i)*0.08 + (C.speed > 0.1 ? 0.3 : 0); });
-  cr.setMouth(C.state === 'hunt' || C.state === 'lunge' || (C.state === 'listen' && C.lookT > 0));
+  cr.setMouth(C.state === 'hunt' || C.state === 'lunge' || C.state === 'search' || (C.state === 'listen' && C.lookT > 0));
   cr.eyeLight.intensity = 0.4 + rand()*0.3;
   cr.led.visible = Math.sin(state.time*(C.state === 'crawl' ? 3 : 12)) > 0;
   if (state.mode !== 'play') return;
@@ -2130,13 +2399,19 @@ function tryRunner(){
   const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
   const ax = Math.abs(fz) >= Math.abs(fx) ? 1 : 0, az = 1 - ax;
   for (let d = 8; d >= 4; d -= 0.5){
-    const px = P.x + fx*d, pz = P.z + fz*d;
-    if (!clearLine(P.f, P.x, P.z, px, pz)) continue;
-    const gx = Math.floor(px), gz = Math.floor(pz);
-    let neg = 0, pos = 0;
-    while (neg < 6 && cellAt(P.f, gx - ax*(neg + 1), gz - az*(neg + 1)) === 0) neg++;
-    while (pos < 6 && cellAt(P.f, gx + ax*(pos + 1), gz + az*(pos + 1)) === 0) pos++;
-    if (neg < 2 || pos < 2) continue;
+    const px = P.x + fx*d, pz = P.z + fz*d, gx = Math.floor(px), gz = Math.floor(pz);
+    if (cellAt(P.f, gx, gz) !== 0 || !seeLine(P.f, P.x, P.z, gx + 0.5, gz + 0.5)) continue;
+    // follow the crossing outward until each end is out of your sight, so it appears and vanishes behind cover, never inside a wall
+    const reach = sgn => {
+      for (let k = 1; k <= 9; k++){
+        const cx = gx + sgn*ax*k, cz = gz + sgn*az*k;
+        if (cellAt(P.f, cx, cz) !== 0) return 0;
+        if (k >= 2 && !seeLine(P.f, P.x, P.z, cx + 0.5, cz + 0.5) && cellAt(P.f, cx + sgn*ax, cz + sgn*az) === 0) return k;
+      }
+      return 0;
+    };
+    const neg = reach(-1), pos = reach(1);
+    if (!neg || !pos) continue;
     const dir = rand() < 0.5 ? 1 : -1, a = dir > 0 ? neg : pos, b = dir > 0 ? pos : neg;
     Object.assign(RUN, { x:gx + 0.5 - dir*ax*a, z:gz + 0.5 - dir*az*a, dx:dir*ax, dz:dir*az, left:a + b, y:levelY(P.f), scuttle:rand() < 0.5, active:true });
     RUN.speed = RUN.scuttle ? 7 : 6.5;
@@ -2149,8 +2424,10 @@ function tryRunner(){
 function updateRunner(dt){
   if (!RUN.active){
     RUN.cd -= dt;
-    const far = !creature || C.state === 'gone' || Math.hypot(P.x - C.x, P.z - C.z) + Math.abs(P.y - C.y)*2 > 8;
-    if (RUN.cd <= 0 && state.grace <= 0 && far && !isStair(Math.floor(P.x), Math.floor(P.z))) RUN.cd = tryRunner() ? 30 + rand()*35 : 2;
+    // only when the real one is nowhere near, so you never see two at once
+    const alive = creature && C.state !== 'gone' && C.state !== 'dead';
+    const far = !alive || C.f !== P.f || Math.hypot(P.x - C.x, P.z - C.z) > 14;
+    if (RUN.cd <= 0 && !state.explore && !P.hidden && state.grace <= 0 && far && !isStair(Math.floor(P.x), Math.floor(P.z))) RUN.cd = tryRunner() ? 30 + rand()*35 : 2;
     return;
   }
   const st = Math.min(RUN.left, RUN.speed*dt);
@@ -2188,6 +2465,9 @@ function updateAudio(dt){
     A.chT = 1.8;
     for (let n = 0; n < 3; n++){ const i = (A.chI + n) % 3; if (L.keys[i] && !L.keys[i].taken){ sfx.chime(i); A.chI = i + 1; break; } }
   }
+  const hunting = alive && (C.state === 'hunt' || C.state === 'lunge' || C.state === 'search');
+  const dd = alive ? Math.hypot(P.x - C.x, P.z - C.z) + Math.abs(P.y - C.y)*2 : 99;
+  A.dread.gain.setTargetAtTime(hunting && dd < 16 ? 0.05 + 0.09*(1 - dd/16) : 0, now, hunting ? 0.25 : 1.2);
   if (!alive){ A.servoG.gain.setTargetAtTime(0, now, 0.05); return; }
   setPos(A.cPan, C.x, C.y + 1, C.z);
   A.servoG.gain.setTargetAtTime(C.speed > 0.1 ? 0.035 + C.speed*0.012 : 0.004, now, 0.08);
