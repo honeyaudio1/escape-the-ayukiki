@@ -1631,6 +1631,10 @@ function initAudio(){
     A.crush = crush;
   } catch(e){ A.ctx = null; }
 }
+// his own tune: an original music-box waltz in A minor, played warped through his speaker while he hunts (0 = rest)
+const TUNE = [57, 60, 64, 62, 60, 59, 57, 52, 57, 59, 60, 59, 56, 59, 64, 62, 60, 59, 57, 0, 57, 0, 0, 0,
+  60, 64, 67, 65, 64, 62, 60, 57, 60, 62, 64, 62, 59, 62, 65, 64, 62, 59, 57, 0, 52, 0, 0, 0];
+const mtof = n => 440*Math.pow(2, (n - 69)/12);
 function muteDread(){ if (A.dread){ A.dread.gain.cancelScheduledValues(0); A.dread.gain.value = 0; } }
 function makePanner(){
   const p = A.ctx.createPanner(); p.panningModel = 'HRTF'; p.distanceModel = 'inverse';
@@ -1747,6 +1751,7 @@ const sfx = {
     }
   },
   breath: v => { noiseHit(A.master, { f:800, q:.7, peak:.09*v, a:.4, dec:.5 }); noiseHit(A.master, { f:520, q:.7, peak:.11*v, a:.15, dec:.8, when:1.0 }); },
+  musicBox: (dest, f) => { tone(dest, { f, type:'triangle', peak:.22, a:.003, dec:.9 }); tone(dest, { f:f*2.004, peak:.07, a:.003, dec:.5 }); tone(dest, { f:f*3.01, peak:.025, a:.002, dec:.25 }); },
   heart: v => { tone(A.master, { f:60, f2:38, peak:.25 + v*.4, dec:.15 }); tone(A.master, { f:54, f2:36, peak:.18 + v*.3, dec:.15, when:.19 }); },
   door: () => { tone(A.master, { f:180, f2:70, type:'square', peak:.12, dec:1.1, lp:500 }); noiseHit(A.master, { f:300, q:.8, peak:.35, dec:.4, type:'lowpass' }); },
   scream: () => {
@@ -2199,6 +2204,7 @@ function hearAt(x, z, f, far){
   const wasCalm = C.state === 'crawl' || C.state === 'listen';
   C.upright = false;   // it drops to all fours to chase
   C.target = { x, z, f };
+  C.chasing = f === P.f && Math.hypot(x - P.x, z - P.z) < 0.6;   // it is after you, not a noise the house made
   C.headTarget = wrapA(Math.atan2(x - C.x, z - C.z) - creature.g.rotation.y); C.lookT = 1.2;
   const d = Math.hypot(x - C.x, z - C.z), dy = Math.abs(levelY(f) - C.y);
   if (!far && d < 3 && dy < 1.5){ C.state = 'lunge'; C.timer = 0.9; C.path = []; }
@@ -2468,6 +2474,15 @@ function updateAudio(dt){
   const hunting = alive && (C.state === 'hunt' || C.state === 'lunge' || C.state === 'search');
   const dd = alive ? Math.hypot(P.x - C.x, P.z - C.z) + Math.abs(P.y - C.y)*2 : 99;
   A.dread.gain.setTargetAtTime(hunting && dd < 16 ? 0.05 + 0.09*(1 - dd/16) : 0, now, hunting ? 0.25 : 1.2);
+  if (alive && (C.state === 'hunt' || C.state === 'lunge') && C.chasing){
+    A.mbT = (A.mbT || 0) - dt;
+    if (A.mbT <= 0){
+      const n = TUNE[(A.mbI || 0) % TUNE.length]; A.mbI = (A.mbI || 0) + 1;
+      const warp = 1 - 0.035*(0.5 + 0.5*Math.sin(state.time*0.6)) + (rand() - 0.5)*0.012;   // the tape drags and wobbles
+      if (n) sfx.musicBox(A.cPan, mtof(n + 12)*warp);
+      A.mbT = 0.3 - 0.1*clamp(1 - dd/16, 0, 1);
+    }
+  } else { A.mbI = 0; A.mbT = 0; }
   if (!alive){ A.servoG.gain.setTargetAtTime(0, now, 0.05); return; }
   setPos(A.cPan, C.x, C.y + 1, C.z);
   A.servoG.gain.setTargetAtTime(C.speed > 0.1 ? 0.035 + C.speed*0.012 : 0.004, now, 0.08);
