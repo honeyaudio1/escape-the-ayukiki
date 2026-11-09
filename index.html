@@ -55,6 +55,25 @@ html,body{height:100%;margin:0;background:var(--void);color:var(--bone);overflow
 #mapView{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;pointer-events:none;width:min(720px,calc(100vw - 32px));display:flex;flex-direction:column;gap:6px;align-items:center}
 #mapCv{width:100%;height:auto;display:block}
 #mapView .mapHint{font-size:12px;letter-spacing:.16em;color:var(--ash);text-transform:uppercase}
+#obj{position:absolute;top:calc(72px + env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));max-width:min(60vw,420px);font-size:13px;line-height:1.35;color:#f0cf74;text-shadow:0 1px 3px #000}
+#obj b{color:var(--ash);font-weight:400;letter-spacing:.16em;font-size:11px;margin-right:6px}
+#pz{position:fixed;inset:0;z-index:14;display:flex;align-items:center;justify-content:center;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));pointer-events:none}
+#pz .box{pointer-events:auto;width:min(480px,100%);background:rgba(12,8,8,.88);border:1px solid rgba(200,40,28,.6);padding:18px 20px;color:var(--bone);font-family:var(--body);box-shadow:0 0 40px rgba(0,0,0,.7)}
+#pz h3{margin:0 0 6px;font-family:var(--display);font-weight:400;font-size:28px;color:#c8281c}
+#pz p{margin:0 0 12px;font-size:15px;line-height:1.5}
+#pz .track{position:relative;height:26px;background:#1d1614;border:1px solid #4a3a30;margin:6px 0 10px}
+#pz .zone{position:absolute;top:0;bottom:0;background:rgba(200,40,28,.75)}
+#pz .mark{position:absolute;top:-4px;bottom:-4px;width:4px;background:#f0cf74;box-shadow:0 0 8px #f0cf74}
+#pz .opts{display:grid;gap:8px}
+#pz button{font-family:var(--body);font-size:15px;color:var(--bone);background:#2a1a16;border:1px solid #6a3a30;padding:9px 12px;text-align:left;cursor:pointer}
+#pz button:focus-visible{outline:2px solid var(--brass)}
+#pz .dials{display:flex;gap:14px;justify-content:center;margin:8px 0 12px}
+#pz .dial{width:56px;height:70px;display:flex;align-items:center;justify-content:center;font-family:'VT323',monospace;font-size:52px;background:#0c0a08;border:2px solid #4a3a30;color:#9aff8a}
+#pz .dial.sel{border-color:#f0cf74}
+#pz .keys{font-size:12px;letter-spacing:.12em;color:var(--ash);text-transform:uppercase}
+#pz .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+#pa{position:absolute;left:50%;bottom:calc(64px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(90vw,640px);text-align:center;font-size:clamp(15px,2vw,19px);line-height:1.4;color:#f0cf74;text-shadow:0 0 6px rgba(0,0,0,.9),0 2px 3px #000;opacity:0;transition:opacity .5s;text-wrap:balance}
+#pa small{display:block;font-size:11px;letter-spacing:.2em;color:#c8281c;margin-bottom:2px}
 #prompt{position:absolute;left:50%;top:58%;transform:translateX(-50%);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--bone);text-shadow:0 1px 4px #000;white-space:nowrap}
 #slats{position:fixed;inset:0;pointer-events:none;z-index:4;background:repeating-linear-gradient(180deg,rgba(8,6,4,.97) 0 7vh,rgba(8,6,4,0) 7vh 10vh),radial-gradient(ellipse at center,rgba(0,0,0,0) 30%,rgba(0,0,0,.92) 80%)}
 #note{position:fixed;inset:0;z-index:15;display:flex;align-items:center;justify-content:center;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:rgba(0,0,0,.55);cursor:pointer}
@@ -143,6 +162,8 @@ h2{font-family:var(--display);font-weight:400;margin:0;font-size:clamp(40px,8vw,
   <div id="noise"><span>NOISE</span><i></i><i></i><i></i></div>
   <div id="inv"></div>
   <div id="prompt"></div>
+  <div id="obj"></div>
+  <div id="pa"><small>Tiki the Clown · over the speakers</small><span id="paText"></span></div>
   <div id="hint">Shift run · C sneak · E use · Click swing · Q drink · M map · F light</div>
 </div>
 
@@ -196,6 +217,7 @@ h2{font-family:var(--display);font-weight:400;margin:0;font-size:clamp(40px,8vw,
 </section>
 
 <div id="slats" hidden></div>
+<div id="pz" hidden><div class="box"><h3 id="pzTitle"></h3><div id="pzBody"></div></div></div>
 <div id="note" hidden><div class="paper"><h3 id="noteTitle"></h3><p id="noteText"></p><div class="close" id="noteClose">Press E or click to put it down</div></div></div>
 <div id="mapView" hidden><canvas id="mapCv" width="708" height="296"></canvas><div class="mapHint" id="mapHint">Press M to close</div></div>
 
@@ -216,8 +238,10 @@ const isTouch = matchMedia('(pointer: coarse)').matches || ('ontouchstart' in wi
 /* ---------- the house ---------- */
 // 1 m grid. Floor 0 is the ground floor (y = 0), floor 1 the basement (y = -4).
 // A straight staircase at x 28-29 runs down from z 14 (top) to z 21 (bottom).
-const CELL = 1, W = 33, H = 25, WALL_H = 3, BASE_Y = -4;
-const STAIR = { x0:28, x1:29, z0:14, z1:21 };
+const CELL = 1, WALL_H = 3, BASE_Y = -4;
+let W = 33, H = 25, STAGE = 'house';   // 'house' then 'park'
+const HOUSE_STAIR = { x0:28, x1:29, z0:14, z1:21 };
+let STAIR = HOUSE_STAIR;
 const isStair = (x, z) => x >= STAIR.x0 && x <= STAIR.x1 && z >= STAIR.z0 && z <= STAIR.z1;
 const stairY = z => clamp(BASE_Y*(z - STAIR.z0)/(STAIR.z1 + 1 - STAIR.z0), BASE_Y, 0);
 const levelY = f => f === 0 ? 0 : BASE_Y;
@@ -238,7 +262,8 @@ const KEY_SPOTS = [
   [0, 2, 2], [0, 18, 2], [0, 30, 8], [0, 2, 22], [0, 25, 22],
   [1, 3, 4], [1, 19, 4], [1, 30, 11], [1, 3, 22], [1, 20, 22]
 ];
-const EXIT = { x:16, z:24, ix:16, iz:23 };
+const HOUSE_EXIT = { x:16, z:24, ix:16, iz:23 };
+let EXIT = HOUSE_EXIT;
 // furniture cells that block movement: [floor, x0, z0, x1, z1]
 const PROP_CELLS = [
   [0, 1, 1, 7, 1], [0, 9, 1, 9, 1], [0, 5, 6, 6, 6],        // kitchen counter, fridge, table
@@ -353,7 +378,7 @@ $('game').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x030304);
 scene.fog = new THREE.FogExp2(0x030304, 0.095);
-const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.05, 60);
+const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.05, 160);
 camera.rotation.order = 'YXZ';
 scene.add(camera);
 // dust motes that only show where the flashlight beam catches them
@@ -388,8 +413,9 @@ function updateAtmos(dt, t){
   dustMat.uniforms.uLight.value = flash.visible ? Math.min(1, flash.intensity/2.4) : 0;
   const base = typeof state !== 'undefined' && state.mode !== 'title' && P.f === 1 && GFX.high;
   const hz = base && !state.explore;
-  scene.fog.color.lerp(hazeCol.setHex(hz ? 0x141814 : 0x030304), Math.min(1, dt*2));
-  const dens = state.explore ? 0.02 : hz ? 0.12 : 0.095; scene.fog.density += (dens - scene.fog.density)*Math.min(1, dt*2);
+  const park = STAGE === 'park';
+  scene.fog.color.lerp(hazeCol.setHex(park ? 0x1a0505 : hz ? 0x141814 : 0x030304), Math.min(1, dt*2));
+  const dens = park ? (state.explore ? 0.012 : 0.035) : state.explore ? 0.02 : hz ? 0.12 : 0.095; scene.fog.density += (dens - scene.fog.density)*Math.min(1, dt*2);
   const breathe = base && state.mode === 'play' && !P.hidden;
   puffT -= dt;
   if (breathe && puffT <= 0){
@@ -1267,6 +1293,7 @@ const hsfx = {
 };
 function inRect(f, x0, z0, x1, z1){ return P.f === f && P.x >= x0 && P.x < x1 + 1 && P.z >= z0 && P.z < z1 + 1; }
 function updateProps(dt){
+  if (STAGE === 'park'){ updatePark(dt); return; }
   const S = L.props, t = state.time, ac = !!A.ctx;
   const near = (o, r) => o.f === P.f && Math.hypot(P.x - o.x, P.z - o.z) < r;
   const dist = o => Math.hypot(P.x - o.x, P.z - o.z) + (o.f === P.f ? 0 : 30);
@@ -1471,9 +1498,9 @@ function buildDoors(group){
   }
   return { doors, map };
 }
-function buildHides(group, grids){
+function buildHides(group, grids, spots = HIDE_SPOTS){
   const out = [];
-  for (const [f, x, z] of HIDE_SPOTS){
+  for (const [f, x, z] of spots){
     let dir = null;
     for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]){
       if (grids[f][z + dz]?.[x + dx] !== 0) continue;
@@ -1573,6 +1600,647 @@ function updateDoors(dt){
   }
 }
 
+/* ---------- act two: the Marrow Fairgrounds ---------- */
+const PW = 45, PH = 45;
+const PARK_EXIT = { x:22, z:0, ix:22, iz:1 };
+const PARK_START = { x:22.5, z:41.5, yaw:0 };
+const PARK_SPAWN = { f:0, x:40, z:6 };
+const PARK_ROOMS = [[0, 'north', 2, 2, 42, 10], [0, 'west', 2, 10, 8, 40], [0, 'east', 36, 10, 42, 40], [0, 'south', 2, 34, 42, 42], [0, 'midway', 10, 10, 34, 34]];
+const PARK_LEVERS = [[22, 28, 'carousel'], [27, 9, 'Ferris wheel'], [31, 28, 'big top']];
+const PARK_HIDES = [[0, 12, 30], [0, 33, 34], [0, 4, 14], [0, 40, 24]];
+const PARK_NOTES = [
+  { f:0, x:20.5, z:28.6, h:0.016, title:'Fairgrounds poster', text:"KEKLAND AMUSEMENTS!\nRides! Games! Candy floss!\nAnd at the end of every night, the GRAND PARADE, led by AYUKIKI and all his brothers!" },
+  { f:0, x:18.5, z:4.6, h:0.016, title:'Ticket, scribbled on the back', text:"the gate runs on the park's power. three breakers: the wheel, the carousel, the big top.\nwhen the rides start up it will hear them. everything will hear them.\nrun the second the lights come on." },
+  { f:0, x:16.6, z:22.5, h:0.016, title:'Torn page', text:"Henry built the fair for the children. Then he built more of them to run it, so it could stay open all night.\nIt never closed. They are still running it." }
+];
+function makeParkGrid(){
+  const g = Array.from({ length:PH }, () => new Array(PW).fill(0));
+  const fill = (x0, z0, x1, z1, v) => { for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) g[z][x] = v; };
+  const circle = (cx, cz, r, v) => { for (let z = 0; z < PH; z++) for (let x = 0; x < PW; x++) if (Math.hypot(x + 0.5 - cx, z + 0.5 - cz) <= r) g[z][x] = v; };
+  fill(0, 0, PW - 1, 0, 1); fill(0, PH - 1, PW - 1, PH - 1, 1); fill(0, 0, 0, PH - 1, 1); fill(PW - 1, 0, PW - 1, PH - 1, 1);
+  fill(8, 6, 8, 18, 1); fill(8, 26, 8, 38, 1); fill(36, 6, 36, 18, 1); fill(36, 26, 36, 38, 1);
+  fill(12, 12, 18, 12, 1); fill(26, 12, 32, 12, 1); fill(12, 32, 18, 32, 1); fill(26, 32, 32, 32, 1);
+  circle(22.5, 22.5, 3.6, 4); circle(31.5, 22.5, 4.5, 4);
+  fill(10, 18, 15, 26, 4); fill(19, 6, 25, 8, 4); g[3][18] = 4; g[3][26] = 4;
+  fill(12, 36, 18, 37, 4); fill(26, 36, 32, 37, 4); fill(2, 2, 6, 6, 4);
+  for (const [, x, z] of PARK_HIDES) g[z][x] = 4;
+  fill(10, 28, 11, 29, 4); fill(33, 13, 35, 15, 4); g[32][39] = 4; fill(2, 20, 3, 21, 4); fill(38, 12, 41, 13, 4); g[40][16] = 4; g[40][28] = 4;
+  g[PARK_EXIT.z][PARK_EXIT.x] = 2;
+  const empty = Array.from({ length:PH }, () => new Array(PW).fill(1));
+  return [g, empty];
+}
+function stripeTex(a, b, n = 8){ return canvasTex(64, 64, (c, w, h) => { for (let i = 0; i < n; i++){ c.fillStyle = i % 2 ? b : a; c.fillRect(i*w/n, 0, w/n + 1, h); } grime(c, 0, 0, w, h, 500, .45); for (let i = 0; i < 4; i++) stain(c, rand()*w, rand()*h, 8 + rand()*10, 'rgba(20,5,3,.6)'); }); }
+const parkMats = {
+  ground:new THREE.MeshPhongMaterial({ shininess:3, map:(() => { const t = canvasTex(128, 128, (c, w, h) => {
+    c.fillStyle = '#1d1810'; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 900; i++){ c.fillStyle = rand() < 0.5 ? 'rgba(40,46,22,.7)' : 'rgba(60,48,30,.5)'; c.fillRect(rand()*w, rand()*h, 1, 2 + rand()*3); }
+    for (let i = 0; i < 6; i++) stain(c, rand()*w, rand()*h, 10 + rand()*20, 'rgba(8,6,4,.6)');
+    grime(c, 0, 0, w, h, 600, .4); }); t.repeat.set(12, 12); return t; })() }),
+  hedge:new THREE.MeshPhongMaterial({ shininess:2, map:canvasTex(64, 64, (c, w, h) => { c.fillStyle = '#0d1a0c'; c.fillRect(0, 0, w, h); for (let i = 0; i < 500; i++){ c.fillStyle = `rgba(${20 + rand()*30|0},${40 + rand()*40|0},${15 + rand()*20|0},.8)`; c.beginPath(); c.arc(rand()*w, rand()*h, 1 + rand()*2.5, 0, Math.PI*2); c.fill(); } grime(c, 0, 0, w, h, 300, .5); }) }),
+  iron:new THREE.MeshPhongMaterial({ color:0x1e1d1f, shininess:40, specular:0x444444 }),
+  tent:new THREE.MeshPhongMaterial({ map:stripeTex('#5a0e0c', '#1c1412', 10), shininess:4, side:THREE.DoubleSide }),
+  canopy:new THREE.MeshPhongMaterial({ map:stripeTex('#6b1410', '#b9ad92', 12), shininess:4, side:THREE.DoubleSide }),
+  awning:new THREE.MeshPhongMaterial({ map:stripeTex('#3d4a22', '#a89a7c', 8), shininess:4, side:THREE.DoubleSide }),
+  paint:new THREE.MeshPhongMaterial({ color:0xc9bea2, shininess:30 }),
+  red:new THREE.MeshPhongMaterial({ color:0x6a1410, shininess:20 }),
+  eye:new THREE.MeshBasicMaterial({ color:0xff3020 }),
+  bulbA:new THREE.MeshBasicMaterial({ color:0x2a1a10 }), bulbB:new THREE.MeshBasicMaterial({ color:0x2a1a10 }),
+  sky:new THREE.MeshBasicMaterial({ side:THREE.BackSide, fog:false, depthWrite:false, map:(() => { const c = document.createElement('canvas'); c.width = 4; c.height = 256; const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 0, 256); g.addColorStop(0, '#020102'); g.addColorStop(0.42, '#0d0204'); g.addColorStop(0.5, '#3a0806'); g.addColorStop(0.56, '#120303'); g.addColorStop(1, '#050101');
+    x.fillStyle = g; x.fillRect(0, 0, 4, 256); return new THREE.CanvasTexture(c); })() })
+};
+function buildPark(){
+  clearLevel();
+  STAGE = 'park'; W = PW; H = PH; STAIR = { x0:-99, x1:-99, z0:-99, z1:-99 }; EXIT = PARK_EXIT;
+  const grids = makeParkGrid(), g0 = grids[0];
+  const group = new THREE.Group(); scene.add(group);
+  const add = (geo, mat, x, y, z, parent = group) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m; };
+  const box = (w, h, d, mat, x, y, z, parent) => add(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent);
+  const cyl = (r1, r2, h, mat, x, y, z, parent, n = 12) => add(new THREE.CylinderGeometry(r1, r2, h, n), mat, x, y, z, parent);
+  const S = { t:0, power:false, gateT:0, musicT:0, musicI:0, creakT:4 };
+  // sky, a blood moon, stars
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(120, 24, 16), parkMats.sky); sky.position.set(22.5, 0, 22.5); group.add(sky);
+  const moon = new THREE.Mesh(new THREE.CircleGeometry(7, 32), new THREE.MeshBasicMaterial({ color:0xb02418, fog:false }));
+  moon.position.set(22.5 - 40, 48, 22.5 - 85); moon.lookAt(22.5, 0, 22.5); group.add(moon);
+  const halo = new THREE.Mesh(new THREE.CircleGeometry(14, 32), new THREE.MeshBasicMaterial({ color:0x5a0a06, transparent:true, opacity:0.35, fog:false, depthWrite:false }));
+  halo.position.copy(moon.position).multiplyScalar(1.01); halo.lookAt(22.5, 0, 22.5); group.add(halo);
+  const sp = new Float32Array(900); for (let i = 0; i < 300; i++){ const a = rand()*Math.PI*2, e = 0.25 + rand()*1.2; sp[i*3] = 22.5 + Math.cos(a)*Math.cos(e)*110; sp[i*3 + 1] = Math.sin(e)*110; sp[i*3 + 2] = 22.5 + Math.sin(a)*Math.cos(e)*110; }
+  const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+  group.add(new THREE.Points(sg, new THREE.PointsMaterial({ color:0xd8b0a0, size:0.5, fog:false })));
+  const moonLight = new THREE.DirectionalLight(0x8a2a20, 0.35); moonLight.position.set(-30, 50, -60); group.add(moonLight);
+  // ground, hedges, the spiked iron fence
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(PW + 60, PH + 60).rotateX(-Math.PI/2), parkMats.ground); ground.position.set(PW/2, 0, PH/2); group.add(ground);
+  const hedges = [], fence = [];
+  for (let z = 0; z < PH; z++) for (let x = 0; x < PW; x++) if (g0[z][x] === 1) (x === 0 || z === 0 || x === PW - 1 || z === PH - 1 ? fence : hedges).push([x, z]);
+  const him = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 2.3, 1), parkMats.hedge, hedges.length), mm = new THREE.Matrix4();
+  hedges.forEach(([x, z], i) => { mm.makeTranslation(x + 0.5, 1.15, z + 0.5); him.setMatrixAt(i, mm); }); group.add(him);
+  const bars = new THREE.InstancedMesh(new THREE.BoxGeometry(0.05, 3, 0.05), parkMats.iron, fence.length*3), spikes = new THREE.InstancedMesh(new THREE.ConeGeometry(0.06, 0.25, 4), parkMats.iron, fence.length*3);
+  fence.forEach(([x, z], i) => { const alongX = z === 0 || z === PH - 1; for (let k = 0; k < 3; k++){ const ox = alongX ? (k - 1)*0.33 : 0, oz = alongX ? 0 : (k - 1)*0.33; mm.makeTranslation(x + 0.5 + ox, 1.5, z + 0.5 + oz); bars.setMatrixAt(i*3 + k, mm); mm.makeTranslation(x + 0.5 + ox, 3.1, z + 0.5 + oz); spikes.setMatrixAt(i*3 + k, mm); } });
+  group.add(bars); group.add(spikes);
+  for (const [x0, z0, x1, z1] of [[0, 0, PW, 0], [0, PH - 1, PW, PH - 1]]) for (const y of [0.4, 2.6]) box(PW, 0.06, 0.06, parkMats.iron, PW/2, y, z0 + 0.5);
+  for (const xx of [0, PW - 1]) for (const y of [0.4, 2.6]) box(0.06, 0.06, PH, parkMats.iron, xx + 0.5, y, PH/2);
+  // Marrow House, looming behind you
+  const house = box(16, 8, 6, new THREE.MeshPhongMaterial({ color:0x1a1612, shininess:2 }), 22.5, 4, PH + 4.5);
+  const roof = add(new THREE.ConeGeometry(11.5, 5, 4), new THREE.MeshPhongMaterial({ color:0x0e0b0a }), 22.5, 10.5, PH + 4.5); roof.rotation.y = Math.PI/4; roof.scale.set(1, 1, 0.45);
+  for (const [wx, wy] of [[16.5, 5.5], [20, 5.5], [25, 5.5], [28.5, 5.5], [18, 2], [27, 2]]) box(1.1, 1.5, 0.05, new THREE.MeshBasicMaterial({ color:rand() < 0.3 ? 0x7a5a20 : 0x120c08 }), wx, wy, PH + 1.47);
+  box(1.4, 2.6, 0.05, new THREE.MeshBasicMaterial({ color:0xd8c89a }), 22.5, 1.3, PH + 1.47);
+  // the gate and its sign
+  const gateL = new THREE.Group(), gateR = new THREE.Group(); gateL.position.set(21.6, 0, 0.5); gateR.position.set(23.4, 0, 0.5); group.add(gateL); group.add(gateR);
+  for (const [gg, sd] of [[gateL, 1], [gateR, -1]]){ for (let k = 0; k < 4; k++) box(0.05, 2.8, 0.05, parkMats.iron, sd*(0.12 + k*0.22), 1.4, 0, gg); box(0.9, 0.06, 0.06, parkMats.iron, sd*0.45, 2.6, 0, gg); box(0.9, 0.06, 0.06, parkMats.iron, sd*0.45, 0.4, 0, gg); }
+  for (const px of [21.4, 23.6]) box(0.3, 4.2, 0.3, parkMats.iron, px, 2.1, 0.5);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.5), new THREE.MeshBasicMaterial({ map:canvasTex(512, 128, (c, w, h) => { c.clearRect(0, 0, w, h); c.font = '58px "Rubik Wet Paint", Impact, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#c8281c'; c.fillText('KEKLAND AMUSEMENTS', w/2, h/2); for (let i = 0; i < 9; i++) c.fillRect(30 + rand()*(w - 60), h/2 + 18, 3, 10 + rand()*30); }), transparent:true, fog:false, side:THREE.DoubleSide }));
+  sign.position.set(22.5, 4.6, 0.55); group.add(sign);
+  const gateLight = new THREE.PointLight(0xff2a1a, 0.9, 9, 2); gateLight.position.set(22.5, 3.5, 2); group.add(gateLight);
+  // the carousel
+  const car = new THREE.Group(); car.position.set(22.5, 0, 22.5); group.add(car);
+  cyl(3.4, 3.5, 0.3, woodMat, 0, 0.15, 0, car, 24); cyl(0.25, 0.25, 3.4, parkMats.paint, 0, 1.8, 0, car);
+  const canopy = add(new THREE.ConeGeometry(3.9, 1.5, 24, 1, true), parkMats.canopy, 0, 4.1, 0, car);
+  cyl(3.9, 3.9, 0.35, parkMats.red, 0, 3.2, 0, car, 24);
+  const horses = [];
+  for (let i = 0; i < 8; i++){
+    const a = i/8*Math.PI*2, hg = new THREE.Group(); hg.position.set(Math.cos(a)*2.6, 0, Math.sin(a)*2.6); hg.rotation.y = -a; car.add(hg);
+    cyl(0.03, 0.03, 3, brassMat, 0, 1.75, 0, hg, 6);
+    const body = new THREE.Group(); hg.add(body);
+    box(0.25, 0.32, 0.85, parkMats.paint, 0, 1.2, 0, body); box(0.18, 0.42, 0.2, parkMats.paint, 0, 1.48, 0.42, body).rotation.x = -0.5; box(0.16, 0.18, 0.36, parkMats.paint, 0, 1.68, 0.6, body);
+    for (const sx of [-0.06, 0.06]) box(0.04, 0.04, 0.04, parkMats.eye, sx*1.4, 1.73, 0.74, body);
+    for (const [lx, lz] of [[-0.08, 0.3], [0.08, 0.3], [-0.08, -0.3], [0.08, -0.3]]){ const lg = box(0.06, 0.55, 0.06, parkMats.paint, lx, 0.85, lz, body); lg.rotation.x = lz > 0 ? -0.5 : 0.4; }
+    horses.push(body);
+  }
+  const carBulbs = [];
+  for (let i = 0; i < 24; i++){ const a = i/24*Math.PI*2; carBulbs.push(add(new THREE.SphereGeometry(0.06, 6, 4), i % 2 ? parkMats.bulbA : parkMats.bulbB, Math.cos(a)*3.9, 3.05, Math.sin(a)*3.9, car)); }
+  const carLight = new THREE.PointLight(0xff7a3a, 0.4, 10, 2); carLight.position.set(0, 2.8, 0); car.add(carLight);
+  // the Ferris wheel
+  const wheelBase = new THREE.Group(); wheelBase.position.set(22.5, 0, 7.5); group.add(wheelBase);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]){ const leg = box(0.18, 10.5, 0.18, parkMats.iron, sx*2.4, 4.6, sz*0.9, wheelBase); leg.rotation.z = -sx*0.24; leg.rotation.x = sz*0.08; }
+  const wheel = new THREE.Group(); wheel.position.set(0, 9.2, 0); wheelBase.add(wheel);
+  for (const zz of [-0.5, 0.5]){ const rim = add(new THREE.TorusGeometry(7, 0.08, 6, 48), parkMats.iron, 0, 0, zz, wheel); rim.rotation.y = 0; }
+  const gondolas = [];
+  for (let i = 0; i < 12; i++){
+    const a = i/12*Math.PI*2;
+    const spoke = box(0.07, 7, 0.07, parkMats.iron, Math.cos(a)*3.5, Math.sin(a)*3.5, 0, wheel); spoke.rotation.z = a - Math.PI/2;
+    const gp = new THREE.Group(); gp.position.set(Math.cos(a)*7, Math.sin(a)*7, 0); wheel.add(gp);
+    box(0.9, 0.8, 1.1, i % 3 ? parkMats.red : parkMats.awning, 0, -0.75, 0, gp); box(0.95, 0.06, 1.15, parkMats.iron, 0, -0.33, 0, gp);
+    gondolas.push(gp);
+  }
+  const wheelBulbs = [];
+  for (let i = 0; i < 36; i++){ const a = i/36*Math.PI*2; wheelBulbs.push(add(new THREE.SphereGeometry(0.09, 6, 4), i % 2 ? parkMats.bulbA : parkMats.bulbB, Math.cos(a)*7, Math.sin(a)*7, 0.6, wheel)); }
+  cyl(0.5, 0.5, 1.3, parkMats.iron, 0, 0, 0, wheel).rotation.x = Math.PI/2;
+  // the big top
+  const tent = new THREE.Group(); tent.position.set(31.5, 0, 22.5); group.add(tent);
+  add(new THREE.CylinderGeometry(4.4, 4.4, 2.6, 28, 1, true), parkMats.tent, 0, 1.3, 0, tent);
+  add(new THREE.ConeGeometry(4.6, 3.6, 28, 1, true), parkMats.tent, 0, 4.4, 0, tent);
+  cyl(0.05, 0.05, 1.5, parkMats.iron, 0, 6.8, 0, tent, 6); box(0.6, 0.35, 0.02, parkMats.red, 0.3, 7.3, 0, tent);
+  box(1.6, 2.2, 0.05, new THREE.MeshBasicMaterial({ color:0x050202 }), -4.42, 1.1, 0, tent).rotation.y = Math.PI/2;
+  const tentLight = new THREE.PointLight(0xff2a14, 0.5, 9, 2); tentLight.position.set(-5.5, 2.2, 0); tent.add(tentLight);
+  // the funhouse, with a giant version of its face for a door
+  const fun = box(6, 5, 9, new THREE.MeshPhongMaterial({ color:0x2a1c26, shininess:4 }), 13, 2.5, 22.5);
+  const faceCv = document.createElement('canvas'); faceCv.width = 512; faceCv.height = 800; drawScare(faceCv.getContext('2d'), 512, 800, 0.9, true);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 7.2), new THREE.MeshPhongMaterial({ map:new THREE.CanvasTexture(faceCv), transparent:true, shininess:10, emissive:0x200606 }));
+  face.position.set(16.03, 3.4, 22.5); face.rotation.y = Math.PI/2; group.add(face);
+  box(0.05, 0.4, 3, new THREE.MeshBasicMaterial({ map:textTex('FUN HOUSE', '#d8b030'), transparent:true }), 16.05, 4.95, 22.5);
+  // game stalls with sagging prizes
+  for (const sx of [15.5, 29.5]){
+    box(7, 1, 1.2, woodMat, sx, 0.5, 36.5); box(7, 2.5, 0.1, woodMat, sx, 1.25, 37.95);
+    const aw = box(7.2, 0.05, 1.8, parkMats.awning, sx, 2.6, 36.4); aw.rotation.x = -0.25;
+    for (let k = 0; k < 6; k++){ const dx = sx - 3 + k*1.2; cyl(0.12, 0.16, 0.35, parkMats.red, dx, 1.2, 37.4, undefined, 8); add(new THREE.SphereGeometry(0.1, 8, 6), parkMats.paint, dx, 1.48, 37.4); }
+  }
+  // ticket booths by the gate
+  for (const bx of [18.5, 26.5]){ box(0.95, 2.4, 0.95, parkMats.red, bx, 1.2, 3.5); box(0.6, 0.5, 0.02, new THREE.MeshBasicMaterial({ color:0x150c08 }), bx, 1.5, 3.98); add(new THREE.ConeGeometry(0.75, 0.6, 4), woodMat, bx, 2.7, 3.5).rotation.y = Math.PI/4; }
+  // the broken coaster in the corner
+  for (let i = 0; i < 9; i++){ const a = i/9*Math.PI*2, r = 1.8; const hgt = 2 + Math.sin(a*2)*1.2 + 1.5; box(0.12, hgt, 0.12, woodMat, 4.5 + Math.cos(a)*r, hgt/2, 4.5 + Math.sin(a)*r);
+    const tr = box(1.3, 0.1, 0.5, woodMat, 4.5 + Math.cos(a)*r, hgt, 4.5 + Math.sin(a)*r); tr.rotation.y = -a; tr.rotation.z = (rand() - 0.5)*0.4; }
+  const cart = box(0.8, 0.5, 0.6, parkMats.red, 6.8, 0.25, 7.6); cart.rotation.set(0.3, 0.8, 0.6);
+  // string lights between poles along the main path
+  const poleBulbs = [];
+  for (const [x, z] of [[19.5, 39], [25.5, 39], [19.5, 31], [25.5, 31], [17.5, 14], [27.5, 14], [19.5, 10.5], [25.5, 10.5]]){
+    cyl(0.06, 0.06, 4, parkMats.iron, x, 2, z, undefined, 6);
+    for (let k = 0; k < 5; k++) poleBulbs.push(add(new THREE.SphereGeometry(0.07, 6, 4), k % 2 ? parkMats.bulbA : parkMats.bulbB, x + (x < 22.5 ? 1 : -1)*k*0.6, 3.8 - Math.sin(k/4*Math.PI)*0.4, z));
+  }
+  // ---- more of the midway: stalls, carts, a strength tester, a fortune teller ----
+  const signAt = (txt, col, x, y, z, ry, w = 1.6) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w/2), new THREE.MeshBasicMaterial({ map:textTex(txt, col), transparent:true, side:THREE.DoubleSide })); m.position.set(x, y, z); m.rotation.y = ry; group.add(m); return m; };
+  const bottleMat = new THREE.MeshPhongMaterial({ color:0x2a5a30, shininess:90, specular:0x99ccaa });
+  // ring toss
+  box(2, 1, 0.5, woodMat, 11, 0.5, 29.75); box(2, 2.4, 0.08, woodMat, 11, 1.2, 28.05);
+  box(1.6, 0.8, 1.2, woodMat, 11, 0.4, 28.7); for (let i = 0; i < 12; i++) cyl(0.04, 0.05, 0.28, bottleMat, 10.4 + (i % 4)*0.4, 0.94, 28.3 + Math.floor(i/4)*0.4, undefined, 8);
+  const rtA = box(2.2, 0.05, 1.6, parkMats.canopy, 11, 2.5, 29.1); rtA.rotation.x = 0.25; signAt('RING TOSS', '#d8b030', 11, 2.15, 30.02, 0);
+  // hook-a-duck
+  cyl(1.3, 1.3, 0.7, parkMats.red, 34.5, 0.35, 14.5, undefined, 20);
+  const pond = add(new THREE.CircleGeometry(1.2, 20), new THREE.MeshPhongMaterial({ color:0x0a1210, shininess:120, specular:0x557766 }), 34.5, 0.71, 14.5); pond.rotation.x = -Math.PI/2;
+  const ducks = new THREE.Group(); ducks.position.set(34.5, 0.76, 14.5); group.add(ducks);
+  for (let i = 0; i < 7; i++){ const a = i/7*Math.PI*2, d = box(0.16, 0.12, 0.22, new THREE.MeshPhongMaterial({ color:i === 3 ? 0x5a1010 : 0xc8a830, shininess:40 }), Math.cos(a)*0.85, 0, Math.sin(a)*0.85, ducks); d.rotation.y = -a; }
+  for (const [px, pz] of [[33.3, 13.3], [35.7, 13.3], [33.3, 15.7], [35.7, 15.7]]) cyl(0.04, 0.04, 2.4, parkMats.iron, px, 1.2, pz, undefined, 6);
+  const dkA = box(2.8, 0.05, 2.8, parkMats.awning, 34.5, 2.45, 14.5); signAt('HOOK A DUCK', '#e8d8a0', 34.5, 2.8, 15.95, 0);
+  // test your strength
+  box(0.9, 0.25, 0.9, woodMat, 39.5, 0.12, 32.5); box(0.16, 4.6, 0.12, parkMats.paint, 39.5, 2.5, 32.5);
+  for (let i = 0; i < 8; i++) box(0.18, 0.03, 0.14, i % 2 ? parkMats.red : brassMat, 39.5, 0.8 + i*0.48, 32.5);
+  const strBell = add(new THREE.SphereGeometry(0.22, 12, 8, 0, Math.PI*2, 0, Math.PI/2), brassMat, 39.5, 4.85, 32.5); strBell.rotation.x = Math.PI;
+  const puck = box(0.2, 0.14, 0.16, parkMats.red, 39.5, 0.4, 32.62);
+  const mallet = box(0.06, 1.1, 0.06, woodMat, 38.9, 0.55, 32.1); mallet.rotation.z = 0.35; box(0.32, 0.18, 0.18, woodMat, 38.7, 1.05, 32.1);
+  signAt('TEST YOUR STRENGTH', '#d8b030', 39.5, 5.5, 32.5, -Math.PI/2, 2.4);
+  // the fortune teller's booth, with a crystal ball that glows
+  box(2, 2.4, 2, new THREE.MeshPhongMaterial({ color:0x2a1638, shininess:6 }), 3, 1.2, 21); add(new THREE.SphereGeometry(1.1, 16, 8, 0, Math.PI*2, 0, Math.PI/2), new THREE.MeshPhongMaterial({ color:0x3a1e4a, shininess:20 }), 3, 2.4, 21);
+  box(0.05, 1, 1.2, new THREE.MeshBasicMaterial({ color:0x080410 }), 4.03, 1.4, 21);
+  const crystal = add(new THREE.SphereGeometry(0.16, 14, 10), new THREE.MeshBasicMaterial({ color:0x7ae0c8 }), 3.9, 1.15, 21);
+  const veil = add(new THREE.ConeGeometry(0.28, 0.9, 10), new THREE.MeshPhongMaterial({ color:0x150a1e }), 3.55, 1.5, 21);
+  signAt('FORTUNES', '#b080e0', 4.05, 2.6, 21, Math.PI/2);
+  // balloon darts
+  box(4, 1, 0.5, woodMat, 40, 0.5, 13.75); box(4, 2.6, 0.08, woodMat, 40, 1.3, 12.05);
+  const bcols = [0x8a1410, 0x1a3a8a, 0xc8a830, 0x2a6a2a, 0xd8d0c0];
+  for (let i = 0; i < 28; i++){ if (rand() < 0.25) continue; add(new THREE.SphereGeometry(0.13, 8, 6), new THREE.MeshPhongMaterial({ color:bcols[i % 5], shininess:80 }), 38.4 + (i % 7)*0.53, 1.0 + Math.floor(i/7)*0.48, 12.15); }
+  const bdA = box(4.2, 0.05, 1.6, parkMats.canopy, 40, 2.7, 13.1); bdA.rotation.x = 0.25; signAt('POP 3 WIN', '#e8d8a0', 40, 2.3, 14.02, 0);
+  // cotton candy and popcorn carts
+  for (const [cx, cz, col, word] of [[16.5, 40.5, 0xd88aa8, 'COTTON CANDY'], [28.5, 40.5, 0xd8b84a, 'POPCORN']]){
+    box(0.9, 0.9, 0.7, parkMats.paint, cx, 0.65, cz); for (const wx of [-0.35, 0.35]) cyl(0.18, 0.18, 0.05, parkMats.iron, cx + wx, 0.18, cz + 0.36, undefined, 12).rotation.x = Math.PI/2;
+    add(new THREE.SphereGeometry(0.3, 10, 8), new THREE.MeshPhongMaterial({ color:col, shininess:5 }), cx, 1.35, cz);
+    cyl(0.025, 0.025, 1.6, parkMats.iron, cx + 0.35, 1.5, cz, undefined, 6); add(new THREE.ConeGeometry(0.8, 0.35, 10, 1, true), parkMats.canopy, cx + 0.35, 2.4, cz);
+    signAt(word, '#c8281c', cx, 1.0, cz - 0.37, Math.PI, 1.0);
+  }
+  // ---- the fairgoers: pale, smiling, almost normal ----
+  const faceTex = n => canvasTex(64, 64, (c, w, h) => {
+    c.fillStyle = '#d8d0bc'; c.beginPath(); c.ellipse(32, 32, 26, 30, 0, 0, Math.PI*2); c.fill();
+    c.fillStyle = '#0a0808'; c.beginPath(); c.arc(22, 27, n % 3 === 0 ? 4 : 2.5, 0, Math.PI*2); c.arc(42, 27, n % 3 === 0 ? 4 : 2.5, 0, Math.PI*2); c.fill();
+    c.strokeStyle = '#3a0a08'; c.lineWidth = 2; c.beginPath(); c.moveTo(16, 42); c.quadraticCurveTo(32, n % 2 ? 56 : 50, 48, 42); c.stroke();
+    if (n % 4 === 1){ c.fillStyle = 'rgba(200,60,60,.35)'; c.beginPath(); c.arc(16, 38, 4, 0, Math.PI*2); c.arc(48, 38, 4, 0, Math.PI*2); c.fill(); }
+  });
+  const faceMats = [0, 1, 2, 3].map(n => new THREE.MeshPhongMaterial({ map:faceTex(n), shininess:20 }));
+  const coatCols = [0x2a2420, 0x3a2a3a, 0x24303a, 0x3a3020, 0x4a1a18, 0x202a22];
+  const PEOPLE = [
+    [19.5, 28.5, 22.5, 22.5, 1], [25.5, 28.2, 22.5, 22.5, 1], [17.5, 24.5, 22.5, 22.5, 0.62], [17.6, 20.2, 22.5, 22.5, 1],
+    [12.5, 28.6, 10.5, 28.7, 1], [13.3, 29.3, 10.5, 28.7, 0.62], [32.4, 16.6, 34.5, 14.5, 1], [32.7, 12.3, 34.5, 14.5, 0.62],
+    [37.8, 32.5, 39.5, 32.5, 1], [4.6, 22.2, 3, 21, 1], [39.5, 14.6, 39.5, 12.5, 1], [41.0, 14.8, 40.5, 12.5, 0.62],
+    [21.5, 10.6, 22.5, 7.5, 1], [23.4, 10.9, 22.5, 7.5, 0.62], [24.8, 11.1, 22.5, 7.5, 1], [25.6, 21.6, 27.5, 22.5, 1],
+    [25.4, 23.7, 27.5, 22.5, 1], [17.4, 39.4, 16.5, 40.5, 0.62], [27.4, 39.4, 28.5, 40.5, 1], [15.5, 35.2, 15.5, 36.5, 1],
+    [29.5, 35.1, 29.5, 36.5, 1], [41.5, 41.5, null, null, 1]
+  ];
+  const people = PEOPLE.map(([x, z, tx, tz, sc], i) => {
+    const pg = new THREE.Group(); pg.position.set(x, 0, z); pg.scale.setScalar(sc); group.add(pg);
+    const coat = new THREE.MeshPhongMaterial({ color:coatCols[i % coatCols.length], shininess:4 });
+    add(new THREE.CylinderGeometry(0.17, 0.3, 1.15, 8), coat, 0, 0.95, 0, pg);
+    const legs = [-0.1, 0.1].map(sx => { const lg = new THREE.Group(); lg.position.set(sx, 0.42, 0); pg.add(lg); add(new THREE.CylinderGeometry(0.055, 0.05, 0.42, 6), parkMats.iron, 0, -0.21, 0, lg); return lg; });
+    const arms = [-1, 1].map(sd => { const a = new THREE.Group(); a.position.set(sd*0.22, 1.42, 0); pg.add(a); add(new THREE.CylinderGeometry(0.05, 0.045, 0.62, 6), coat, 0, -0.31, 0, a); a.rotation.z = sd*0.12; return a; });
+    const head = new THREE.Group(); head.position.y = 1.72; pg.add(head);
+    const skull = add(new THREE.SphereGeometry(0.15, 12, 10), faceMats[i % 4], 0, 0, 0, head); skull.rotation.y = -Math.PI/2; skull.scale.set(1, 1.15, 1);
+    if (i % 5 === 2) add(new THREE.ConeGeometry(0.09, 0.22, 8), parkMats.canopy, 0, 0.24, 0, head);
+    else if (i % 3 === 0) add(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 10), new THREE.MeshPhongMaterial({ color:0x111010 }), 0, 0.15, 0, head);
+    if (sc < 1){   // children hold balloons
+      const bcol = [0x9a1810, 0xd8d0c0, 0x2a4a9a][i % 3];
+      add(new THREE.CylinderGeometry(0.004, 0.004, 1.3, 3), parkMats.iron, 0.3, 1.9, 0, pg);
+      add(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshPhongMaterial({ color:bcol, shininess:90 }), 0.3, 2.6, 0, pg).scale.set(1, 1.2, 1);
+      arms[1].rotation.z = 0.9;
+    }
+    const face = tx === null ? 0 : Math.atan2(tx - x, tz - z); pg.rotation.y = face;
+    return { g:pg, head, arms, legs, x, z, face, gone:0, i, stare:tx === null, st:'wait', wait:rand()*8, path:[], spot:-1, ph:rand()*6, sp:sc < 1 ? 1.05 : 0.85 + rand()*0.3, ox:(rand() - 0.5)*0.5, oz:(rand() - 0.5)*0.5, lookA:face, repath:0 };
+  });
+  // the gate code, painted in blood at the carousel, the Ferris wheel and the big top
+  PS.code = [Math.floor(rand()*10), Math.floor(rand()*10), Math.floor(rand()*10)];
+  const codeSign = (txt, x, y, z, ry) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.9), new THREE.MeshBasicMaterial({ map:textTex(txt, 'rgba(170,16,10,.95)'), transparent:true, side:THREE.DoubleSide })); m.position.set(x, y, z); m.rotation.y = ry; group.add(m); };
+  box(1.9, 1.0, 0.06, woodMat, 24.6, 1.2, 27.3); codeSign(`FIRST · ${PS.code[0]}`, 24.6, 1.2, 27.35, 0);
+  codeSign(`SECOND · ${PS.code[1]}`, 22.5, 1.4, 9.05, 0);
+  codeSign(`THIRD · ${PS.code[2]}`, 26.95, 2.0, 24.6, -Math.PI/2);
+  // the keypad by the gate
+  const kp = box(0.35, 0.5, 0.12, parkMats.iron, 24.2, 1.3, 1.62); const kpScr = box(0.25, 0.12, 0.02, new THREE.MeshBasicMaterial({ color:0x0a1a0a }), 24.2, 1.42, 1.69);
+  cyl(0.05, 0.05, 1.1, parkMats.iron, 24.2, 0.55, 1.62, undefined, 6);
+  // breaker levers: these are this act's "keys"
+  const keys = PARK_LEVERS.map(([x, z, name]) => {
+    const kg = new THREE.Group(); kg.position.set(x + 0.5, 0, z + 0.5); group.add(kg);
+    box(0.4, 1.2, 0.3, new THREE.MeshPhongMaterial({ color:0x3a3d2a, shininess:30 }), 0, 0.6, 0, kg);
+    box(0.36, 0.08, 0.02, new THREE.MeshBasicMaterial({ color:0xd8b030 }), 0, 1.05, 0.16, kg);
+    const handle = new THREE.Group(); handle.position.set(0, 0.8, 0.18); kg.add(handle); box(0.04, 0.35, 0.04, brassMat, 0, 0.17, 0, handle); handle.rotation.x = -0.9;
+    const kl = new THREE.PointLight(0xff3020, 0.7, 4, 2); kl.position.set(x + 0.5, 1.4, z + 0.5); group.add(kl);
+    return { f:0, x:x + 0.5, z:z + 0.5, y:0, mesh:kg, handle, light:kl, taken:false, lever:true, name };
+  });
+  // pickups: two energy drinks and the fire axe, somewhere out in the lanes
+  const items = [], used = [[22, 41], ...PARK_LEVERS.map(l => [l[0], l[1]])];
+  for (const [kind, arg] of [['drink'], ['drink'], ['weapon', 'fire axe']]){
+    for (let i = 0; i < 60; i++){
+      const [, , x0, z0, x1, z1] = PARK_ROOMS[Math.floor(rand()*PARK_ROOMS.length)];
+      const x = x0 + Math.floor(rand()*(x1 - x0 + 1)), z = z0 + Math.floor(rand()*(z1 - z0 + 1));
+      if (g0[z]?.[x] !== 0 || used.some(([ux, uz]) => Math.abs(ux - x) + Math.abs(uz - z) < 6)) continue;
+      used.push([x, z]); const mesh = itemMesh(kind, arg); if (kind === 'weapon') mesh.rotation.z = 0.5;
+      mesh.position.set(x + 0.5, 0.55, z + 0.5); group.add(mesh); items.push({ kind, arg, f:0, x:x + 0.5, z:z + 0.5, y:0, mesh, taken:false }); break;
+    }
+  }
+  // photo booths to hide in, and three more pages of the story
+  const hides = buildHides(group, grids, PARK_HIDES);
+  const notes = PARK_NOTES.map(n => { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.28), noteMat); m.rotation.set(-Math.PI/2, 0, rand()*0.8 - 0.4); m.position.set(n.x, n.h, n.z); group.add(m); return Object.assign({ m, read:false }, n); });
+  for (const [x, z, ry] of [[19.2, 33.5, 0.6], [25.8, 18.5, -0.8], [17.2, 9.8, 0.4], [34.5, 30.5, -1.2], [9.8, 30.5, 1.0], [27.8, 4.5, -0.3]]){
+    cyl(0.07, 0.09, 5, parkMats.iron, x, 2.5, z, undefined, 6);
+    for (const k of [-1, 1]){ const horn = add(new THREE.ConeGeometry(0.28, 0.55, 10, 1, true), new THREE.MeshPhongMaterial({ color:0x6b665a, shininess:30, side:THREE.DoubleSide }), x + k*0.22*Math.cos(ry), 4.9, z + k*0.22*Math.sin(ry)); horn.rotation.set(Math.PI/2 + 0.3, ry + (k > 0 ? 0 : Math.PI), 0); }
+  }
+  const teddyCv = document.createElement('canvas'); teddyCv.width = 256; teddyCv.height = 512;
+  { const c = teddyCv.getContext('2d');
+    c.fillStyle = '#d9cfb8'; c.fillRect(0, 0, 256, 512);
+    // little body: striped suit, stubby arms and legs, oversized shoes
+    for (let i = 0; i < 5; i++){ c.fillStyle = i % 2 ? '#2a4a8a' : '#c8281c'; c.fillRect(98 + i*12, 300, 12, 120); }
+    c.fillStyle = '#efe6cc'; c.beginPath(); c.moveTo(96, 300); c.lineTo(160, 300); c.lineTo(150, 316); c.lineTo(106, 316); c.fill();
+    c.fillStyle = '#c8281c'; c.fillRect(78, 318, 20, 46); c.fillRect(158, 318, 20, 46);
+    c.fillStyle = '#efe6cc'; c.beginPath(); c.arc(88, 368, 10, 0, Math.PI*2); c.arc(168, 368, 10, 0, Math.PI*2); c.fill();
+    c.fillStyle = '#2a4a8a'; c.fillRect(104, 420, 18, 44); c.fillRect(134, 420, 18, 44);
+    c.fillStyle = '#c8281c'; c.beginPath(); c.ellipse(104, 470, 26, 11, 0, 0, Math.PI*2); c.ellipse(158, 470, 26, 11, 0, 0, Math.PI*2); c.fill();
+    // the huge head: hair puffs, a tiny party hat, a moon of a face
+    c.fillStyle = '#d8762a'; for (const [x, y, r] of [[22, 150, 34], [234, 150, 34], [30, 205, 30], [226, 205, 30], [40, 105, 30], [216, 105, 30]]){ c.beginPath(); c.arc(x, y, r, 0, Math.PI*2); c.fill(); }
+    c.fillStyle = '#f4efe2'; c.beginPath(); c.ellipse(128, 160, 112, 128, 0, 0, Math.PI*2); c.fill();
+    c.fillStyle = '#3a6a3a'; c.beginPath(); c.moveTo(108, 38); c.lineTo(128, -4); c.lineTo(148, 38); c.fill(); c.fillStyle = '#d8b030'; c.beginPath(); c.arc(128, 0, 7, 0, Math.PI*2); c.fill();
+    c.fillStyle = '#2a4a8a'; for (const ex of [82, 174]){ c.beginPath(); c.moveTo(ex, 96); c.lineTo(ex + 20, 132); c.lineTo(ex, 168); c.lineTo(ex - 20, 132); c.fill(); }
+    c.fillStyle = '#111'; c.beginPath(); c.arc(82, 132, 8, 0, Math.PI*2); c.fill();
+    c.strokeStyle = '#111'; c.lineWidth = 3; for (let i = 0; i < 7; i++){ c.beginPath(); c.moveTo(160 + rand()*28, 110 + rand()*44); c.lineTo(160 + rand()*28, 110 + rand()*44); c.stroke(); }
+    c.fillStyle = '#c8281c'; c.beginPath(); c.arc(128, 168, 22, 0, Math.PI*2); c.fill();
+    c.beginPath(); c.moveTo(40, 200); c.quadraticCurveTo(128, 318, 216, 200); c.quadraticCurveTo(128, 246, 40, 200); c.fill();
+    c.fillStyle = '#efe6cc'; for (let x = 58; x < 200; x += 11) c.fillRect(x, 214 - Math.abs(x - 128)*0.12 + 8, 7, 11);
+    for (let i = 0; i < 7; i++){ c.fillStyle = 'rgba(90,10,6,.55)'; c.fillRect(60 + rand()*140, 230 + rand()*30, 2 + rand()*2, 30 + rand()*60); }
+    c.fillStyle = '#c8281c'; c.font = '30px "Rubik Wet Paint", Impact, sans-serif'; c.textAlign = 'center'; c.fillText('TIKI', 128, 400);
+    c.fillStyle = '#efe6cc'; c.font = '13px "Special Elite", monospace'; c.fillText('your host tonight!', 128, 500);
+    grime(c, 0, 0, 256, 512, 2500, .45);
+  }
+  const teddy = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 3.2), new THREE.MeshPhongMaterial({ map:new THREE.CanvasTexture(teddyCv), side:THREE.DoubleSide, shininess:8 }));
+  teddy.position.set(20.3, 1.6, 39.6); teddy.rotation.y = 0.35; group.add(teddy);
+  box(0.08, 1.2, 0.08, woodMat, 20.3, 0.6, 39.5);
+  Object.assign(S, { kpScr, people, ducks, puck, strBell, crystal, evT:2, scrT:8, strT:6, puckT:0, car, horses, carBulbs, carLight, wheel, gondolas, wheelBulbs, tent, tentLight, poleBulbs, gateL, gateR, gateLight, face });
+  group.traverse(o => { if (o.isMesh && !(o.material && o.material.transparent) && o !== sky && o !== ground) { o.castShadow = true; o.receiveShadow = true; } });
+  ground.receiveShadow = true;
+  L = { grids, group, door:null, daylight:null, exitLight:gateLight, keys, bulb:null, items, props:null, doors:[], doorMap:{}, hides, notes, park:S };
+}
+// an original calliope waltz in D minor for the carousel (0 = rest)
+const CALLIOPE = [74, 0, 72, 70, 69, 70, 72, 0, 74, 77, 76, 74, 72, 70, 69, 0, 70, 69, 67, 65, 67, 69, 70, 0, 69, 67, 65, 64, 62, 0, 0, 0,
+  62, 65, 69, 74, 72, 69, 70, 74, 77, 76, 72, 69, 67, 70, 74, 72, 70, 67, 69, 65, 62, 64, 65, 67, 69, 0, 62, 0, 0, 0];
+function updatePark(dt){
+  const S = L.park; if (!S) return;
+  S.t += dt; const on = S.power, ac = !!A.ctx;
+  S.car.rotation.y += dt*(on ? 0.55 : 0.07);
+  S.horses.forEach((h, i) => { h.position.y = Math.sin(S.t*(on ? 3 : 0.6) + i)*(on ? 0.25 : 0.05); });
+  S.wheel.rotation.z += dt*(on ? 0.16 : 0.025);
+  S.gondolas.forEach(gp => { gp.rotation.z = -S.wheel.rotation.z + Math.sin(S.t*1.3 + gp.position.x)*0.08; });
+  const flick = rand();
+  parkMats.bulbA.color.setHex(on ? ((Math.floor(S.t*6) % 2) ? 0xffd27a : 0xff3a2a) : flick < 0.02 ? 0x8a5a30 : 0x1e140c);
+  parkMats.bulbB.color.setHex(on ? ((Math.floor(S.t*6) % 2) ? 0xff3a2a : 0xffd27a) : flick > 0.985 ? 0x8a3020 : 0x1e140c);
+  S.carLight.intensity = on ? 1.2 + rand()*0.3 : (rand() < 0.03 ? 0.6 : 0.15);
+  S.tentLight.intensity = on ? 1 + rand()*0.4 : 0.35 + rand()*0.2;
+  S.gateLight.intensity = 0.7 + rand()*0.3;
+  if (S.gateT > 0){ S.gateT = Math.min(1, S.gateT + dt*0.8); S.gateL.rotation.y = -1.6*S.gateT; S.gateR.rotation.y = 1.6*S.gateT; }
+  // the calliope: faint and broken before the power is on, loud and fast after
+  S.musicT -= dt;
+  if (ac && S.musicT <= 0){
+    const n = CALLIOPE[S.musicI % CALLIOPE.length]; S.musicI++;
+    const d = Math.hypot(P.x - 22.5, P.z - 22.5);
+    if (n && (on || rand() < 0.75)){
+      const p = fxPan(22.5, 2.5, 22.5), warp = on ? 1 : 0.94 + rand()*0.03, f = mtof(n)*warp;
+      tone(p, { f, type:'square', peak:on ? .14 : .05, dec:.25, lp:1700 }); tone(p, { f:f*2, type:'triangle', peak:on ? .06 : .02, dec:.2 });
+      if (S.musicI % 3 === 1) tone(p, { f:mtof(n - 24)*warp, type:'triangle', peak:on ? .12 : .04, dec:.3 });
+    }
+    S.musicT = on ? 0.2 : 0.42 + (d < 8 ? 0 : rand()*0.1);
+  }
+  if (state.mode === 'play') updateTeddy(dt);
+  updatePuzzle(dt);
+  updateCrowd(dt, S);
+  if (state.mode === 'play' && ac) updateCarnivalSound(dt, S);
+  S.creakT -= dt;
+  if (ac && S.creakT <= 0){ S.creakT = 4 + rand()*5; hsfx.creak(fxPan(22.5, 9, 7.5)); if (rand() < 0.4) sfx.heehee(fxPan(rand()*44, 1.5, rand()*44), 0.4, 1); }
+}
+// Tiki the Clown, the park's announcer: pre-recorded lines (public-domain voice, processed through a blown-out PA)
+const TIKI_TEXT = {"welcome": "Goooood evening, boys and girls, and all you lovely leftovers! Welcome to Kekland Amusements! Admission is free. Leaving... costs extra.", "lost": "Attention! Attention! Lost children, please make your way to the funhouse. Don't run. He hears you when you run.", "closing": "The park closes in five minutes! It has closed in five minutes... for fifty years. Isn't that funny? I think it's funny!", "smile": "Smile! Go on, smile! Wider. Wider! WIDER!", "snack": "Tonight's special at the snack bar: candy apples, cotton candy... and you.", "parents": "Have you seen your mommy? Have you seen your daddy? They have seen you.", "prize": "Step right up, step right up! Everybody wins a prize! Everybody IS the prize!", "spares": "Please keep your arms and legs inside the ride at all times. We're running low on spares!", "safe": "The rides are perfectly safe. The rides are perfectly safe. The rides are perfectly safe.", "delighted": "Tiki's not angry. Tiki's never angry. Tiki is DELIGHTED!", "running": "No running in the park! He gets so... excited.", "exit": "The exit? What exit? Oh, that exit! It's right... behind... you.", "crowd": "A big round of applause for our guest tonight! Nobody? Tough crowd! TOUGH CROWD!", "located": "Attention guests. The exit is located... the exit is located... the exit is located...", "forever": "And tonight's lucky winner gets to stay... FOREVER!", "breaker1": "Ooh, playing with the wires, are we? Naughty, naughty!", "breaker2": "Who said you could touch that?", "breaker3": "Almost! Almost! Tiki is SO excited for you!", "power": "Lights! Music! Screaming! Now it's a party! Last ride! LAST RIDE!", "gate": "Leaving so soon? Tiki will save your seat.", "winner": "A WINNER! We have a WINNER! Everybody heard that bell. Everybody.", "fortune": "Ooh, Madame sees your future! It is very... very short.", "locked": "Tsk, tsk, tsk! Breakers need a key, silly! Win some tickets! Play the games!"};
+const TIKI_AMBIENT = ['lost', 'closing', 'smile', 'snack', 'parents', 'prize', 'spares', 'safe', 'delighted', 'running', 'exit', 'crowd', 'located', 'forever'];
+const TIKI_BUF = {};
+const TD = { t:0, used:[], started:false, gateSaid:false, loading:false, src:null };
+function loadTiki(){
+  if (TD.loading || !A.ctx) return; TD.loading = true;
+  for (const key of Object.keys(TIKI_TEXT)){
+    fetch('vo/tiki_' + key + '.mp3').then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(b => new Promise((ok, no) => A.ctx.decodeAudioData(b, ok, no))).then(buf => { TIKI_BUF[key] = buf; }).catch(() => {});
+  }
+}
+function tikiHush(){
+  try { speechSynthesis.cancel(); } catch(e){}
+  if (TD.src){ try { TD.src.stop(); } catch(e){} TD.src = null; }
+  clearTimeout(TD.hideT); clearTimeout(TD.playT); $('pa').style.opacity = 0;
+}
+function tikiSay(key){
+  if (state.mode !== 'play' || STAGE !== 'park') return;
+  const text = TIKI_TEXT[key]; if (!text) return;
+  tikiHush();
+  if (A.ctx){
+    tone(A.master, { f:784, type:'triangle', peak:.12, dec:.7 }); tone(A.master, { f:622, type:'triangle', peak:.12, dec:.9, when:.32 });
+    noiseHit(A.master, { f:2400, q:.5, peak:.12, a:.02, dec:.5, when:.6 });
+    if (rand() < 0.35) tone(A.master, { f:2600, f2:3400, type:'sine', peak:.04, dec:.8, when:.65 });
+  }
+  const buf = TIKI_BUF[key], dur = buf ? buf.duration : 2 + text.length*0.075;
+  $('paText').textContent = text; $('pa').style.opacity = 1;
+  TD.hideT = setTimeout(() => { $('pa').style.opacity = 0; }, (dur + 1.4)*1000);
+  TD.playT = setTimeout(() => {
+    if (state.mode !== 'play') return;
+    if (buf && A.ctx){
+      const src = A.ctx.createBufferSource(); src.buffer = buf;
+      const g = A.ctx.createGain(); g.gain.value = 0.95; src.connect(g); g.connect(A.master); g.connect(A.verb);
+      src.start(); TD.src = src;
+    } else {
+      try { const u = new SpeechSynthesisUtterance(text); u.pitch = 1.7; u.rate = 0.95; speechSynthesis.speak(u); } catch(e){}
+    }
+  }, 750);
+}
+function updateTeddy(dt){
+  if (!TD.started){ TD.t = 2.5; TD.started = true; TD.first = true; TD.used = []; TD.gateSaid = false; loadTiki(); }
+  TD.t -= dt;
+  if (TD.t <= 0){
+    if (TD.first){ TD.first = false; tikiSay('welcome'); }
+    else {
+      if (TD.used.length >= TIKI_AMBIENT.length) TD.used = [];
+      let i; do { i = Math.floor(rand()*TIKI_AMBIENT.length); } while (TD.used.includes(i));
+      TD.used.push(i); tikiSay(TIKI_AMBIENT[i]);
+    }
+    TD.t = 26 + rand()*16;
+  }
+  if (state.exitOpen && !TD.gateSaid && Math.hypot(P.x - 22.5, P.z - 1) < 7){ TD.gateSaid = true; tikiSay('gate'); }
+}
+// the people of the fair: they sway, watch the rides, and turn to look at you when you look away
+const WALK_SPOTS = [[11.5, 30.5, 11, 29], [34.5, 16.5, 34.5, 14.5], [38.5, 32.5, 39.5, 32.5], [4.5, 21.5, 3, 21], [40.5, 14.5, 40, 13],
+  [22.5, 10.5, 22.5, 7.5], [22.5, 27.5, 22.5, 22.5], [18.5, 22.5, 22.5, 22.5], [26.5, 22.5, 28, 22.5], [15.5, 35.5, 15.5, 36.5],
+  [29.5, 35.5, 29.5, 36.5], [16.5, 39.5, 16.5, 40.5], [28.5, 39.5, 28.5, 40.5], [13.5, 16.5, 13, 20], [31.5, 30.5, 31.5, 22.5], [22.5, 37.5, 22.5, 30]];
+function stepPerson(pp, spd, dt){
+  if (!pp.path.length) return true;
+  const [, cx, cz] = pp.path[0], last = pp.path.length === 1;
+  const tx = cx + 0.5 + (last ? pp.ox : 0), tz = cz + 0.5 + (last ? pp.oz : 0);
+  const dx = tx - pp.x, dz = tz - pp.z, d = Math.hypot(dx, dz), st = Math.min(d, spd*dt);
+  if (d > 1e-3){ pp.x += dx/d*st; pp.z += dz/d*st; pp.g.rotation.y += wrapA(Math.atan2(dx, dz) - pp.g.rotation.y)*Math.min(1, dt*6); }
+  pp.ph += dt*spd*5.5;
+  pp.legs[0].rotation.x = Math.sin(pp.ph)*0.5; pp.legs[1].rotation.x = -Math.sin(pp.ph)*0.5;
+  if (!pp.balloon){ pp.arms[0].rotation.x = -Math.sin(pp.ph)*0.35; pp.arms[1].rotation.x = Math.sin(pp.ph)*0.35; }
+  if (st >= d - 1e-3) pp.path.shift();
+  return !pp.path.length;
+}
+function updateCrowd(dt, S){
+  const va = Math.atan2(-Math.sin(P.yaw), -Math.cos(P.yaw)), on = S.power;
+  for (const pp of S.people){
+    if (pp.gone > 0 || pp.stare) continue;
+    pp.balloon = pp.arms[1].rotation.z > 0.5;
+    if (on){
+      const d = Math.hypot(P.x - pp.x, P.z - pp.z);
+      if (d > 3.2){
+        pp.repath -= dt;
+        if (pp.repath <= 0 || !pp.path.length){ pp.repath = 1.2 + rand(); pp.path = findPath({ f:0, x:Math.floor(pp.x), z:Math.floor(pp.z) }, { f:0, x:Math.floor(P.x), z:Math.floor(P.z) }); }
+        stepPerson(pp, 0.75, dt);
+      } else { pp.path = []; pp.g.rotation.y += wrapA(Math.atan2(P.x - pp.x, P.z - pp.z) - pp.g.rotation.y)*Math.min(1, dt*3); pp.legs.forEach(l => { l.rotation.x = 0; }); }
+    } else if (pp.st === 'wait'){
+      pp.wait -= dt; pp.legs.forEach(l => { l.rotation.x *= 0.85; });
+      pp.g.rotation.y += wrapA(pp.lookA - pp.g.rotation.y)*Math.min(1, dt*2);
+      if (pp.wait <= 0){
+        let k; do { k = Math.floor(rand()*WALK_SPOTS.length); } while (k === pp.spot);
+        const [sx, sz] = WALK_SPOTS[k];
+        pp.path = findPath({ f:0, x:Math.floor(pp.x), z:Math.floor(pp.z) }, { f:0, x:Math.floor(sx), z:Math.floor(sz) });
+        if (pp.path.length){ pp.spot = k; pp.st = 'walk'; } else pp.wait = 2 + rand()*3;
+      }
+    } else if (stepPerson(pp, pp.sp, dt)){
+      const [sx, sz, lx, lz] = WALK_SPOTS[pp.spot]; pp.st = 'wait'; pp.wait = 5 + rand()*12; pp.lookA = Math.atan2(lx - pp.x, lz - pp.z);
+    }
+    pp.g.position.set(pp.x, 0, pp.z);
+  }
+  for (const pp of S.people){
+    if (pp.gone > 0){ pp.gone -= dt; if (pp.gone <= 0){ const toP = Math.atan2(pp.x - P.x, pp.z - P.z); if (Math.abs(wrapA(toP - va)) > 1.1) pp.g.visible = true; else pp.gone = 1; } continue; }
+    const d = Math.hypot(P.x - pp.x, P.z - pp.z);
+    // walk right up to one and it is simply not there any more
+    if (d < 1.3 && state.mode === 'play'){ pp.g.visible = false; pp.gone = 8 + rand()*8; if (A.ctx) hsfx.whisper(fxPan(pp.x, 1.6, pp.z)); continue; }
+    pp.g.rotation.z = Math.sin(S.t*0.8 + pp.i)*0.025;
+    const toMe = wrapA(Math.atan2(P.x - pp.x, P.z - pp.z) - pp.g.rotation.y);
+    const lookingAt = Math.abs(wrapA(Math.atan2(pp.x - P.x, pp.z - P.z) - va)) < 1.0;
+    if (on || pp.stare || (!lookingAt && d < 12)) pp.head.rotation.y = clamp(toMe, -1.6, 1.6);
+    else if (lookingAt) pp.head.rotation.y += (0 - pp.head.rotation.y)*Math.min(1, dt*0.8);
+    if (on && !pp.path.length){ pp.arms.forEach((a, k) => { a.rotation.x = -0.9 + Math.sin(S.t*7 + k*Math.PI)*0.35; }); }
+  }
+  S.ducks.rotation.y += dt*(on ? 0.9 : 0.25);
+  S.crystal.scale.setScalar(1 + Math.sin(S.t*2.3)*0.08);
+  // the strength tester rings by itself
+  S.strT -= dt;
+  if (S.strT <= 0){ S.strT = 9 + rand()*12; S.puckT = 0.01; }
+  if (S.puckT > 0){
+    S.puckT += dt; const k = Math.min(1, S.puckT/0.35);
+    S.puck.position.y = 0.4 + 4.3*(k < 1 ? k*(2 - k) : Math.max(0, 1 - (S.puckT - 0.35)*1.5));
+    if (S.puckT >= 0.35 && S.puckT - dt < 0.35 && A.ctx){ const p = fxPan(39.5, 4.8, 32.5); tone(p, { f:1760, peak:.25, dec:1.4 }); tone(p, { f:2640, peak:.12, dec:1 }); }
+    if (S.puckT > 1.1){ S.puckT = 0; S.puck.position.y = 0.4; }
+  }
+}
+// a crowd that murmurs and sometimes stops all at once, game bells, children laughing, and screams behind the canvas
+function updateCarnivalSound(dt, S){
+  const c = A.ctx, now = c.currentTime, on = S.power;
+  if (!S.amb){
+    const src = c.createBufferSource(); src.buffer = A.noise; src.loop = true;
+    const out = c.createGain(); out.gain.value = 0; out.connect(A.master); out.connect(A.verb);
+    const bands = [[380, 3], [820, 4], [1500, 5], [2400, 6]].map(([f, q]) => { const b = c.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = f; b.Q.value = q; const g = c.createGain(); g.gain.value = 0.5; src.connect(b); b.connect(g); g.connect(out); return { b, g, f }; });
+    src.start(); S.amb = { src, out, bands, drop:0, dropT:15 + rand()*15 };
+  }
+  const am = S.amb;
+  am.bands.forEach((bd, i) => { bd.b.frequency.setTargetAtTime(bd.f*(1 + 0.3*Math.sin(S.t*(1.7 + i*0.9) + i) + (rand() - 0.5)*0.2), now, 0.05); bd.g.gain.setTargetAtTime(0.25 + rand()*0.6, now, 0.04); });
+  am.dropT -= dt;
+  if (am.dropT <= 0 && am.drop <= 0){ am.drop = 2 + rand()*2; am.dropT = 18 + rand()*20; }
+  if (am.drop > 0) am.drop -= dt;
+  am.out.gain.setTargetAtTime(am.drop > 0 ? 0 : (on ? 0.22 : 0.11), now, am.drop > 0 ? 0.02 : 0.6);
+  // scattered fairground sounds, more and louder once the power is on
+  S.evT -= dt;
+  if (S.evT <= 0){
+    S.evT = (on ? 0.9 : 1.8) + rand()*(on ? 1.5 : 3);
+    const spots = [[11, 29], [34.5, 14.5], [39.5, 32.5], [3, 21], [40, 13], [22.5, 22.5], [22.5, 9], [15.5, 36.5], [29.5, 36.5], [16.5, 40.5], [28.5, 40.5]];
+    const [x, z] = spots[Math.floor(rand()*spots.length)], p = fxPan(x, 1.4, z), r = rand(), lv = on ? 1 : 0.6;
+    if (r < 0.2){ tone(p, { f:1320, peak:.18*lv, dec:.6 }); tone(p, { f:1760, peak:.14*lv, dec:.5, when:.12 }); }
+    else if (r < 0.4){ for (let i = 0; i < 4 + (rand()*3|0); i++) hee(p, 0.08 + i*0.13, { dur:.09, f0:720 + rand()*200, rise:1.05, fall:.9, peak:.18*lv }); }
+    else if (r < 0.52) noiseHit(p, { f:3000, q:.4, type:'highpass', peak:.6*lv, dec:.08 });
+    else if (r < 0.64){ noiseHit(p, { f:4200, q:5, peak:.25*lv, dec:.05 }); noiseHit(p, { f:5200, q:5, peak:.2*lv, dec:.06, when:.09 }); }
+    else if (r < 0.76) for (let i = 0; i < 3; i++) hee(p, 0.1 + i*0.4, { dur:.32, f0:260 + rand()*40, rise:1.02, fall:.75, peak:.22*lv });   // a giggle, far too slow and too low
+    else if (r < 0.88){ const d = Math.hypot(P.x - x, P.z - z); if (d < 14) hsfx.whisper(fxPan(P.x + (rand() - 0.5)*1.5, 1.6, P.z + (rand() - 0.5)*1.5)); }
+    else hsfx.creak(p);
+  }
+  // muffled screaming from inside the big top and the funhouse
+  S.scrT -= dt;
+  if (S.scrT <= 0){ S.scrT = 10 + rand()*12; const [x, z] = rand() < 0.6 ? [31.5, 22.5] : [13, 22.5]; hsfx.scream(fxPan(x, 1.2, z)); if (rand() < 0.4) setTimeout(() => { if (A.ctx && state.mode === 'play') hsfx.knock(fxPan(x, 1, z), 2, 0.6); }, 900); }
+}
+function powerOn(){
+  const S = L.park; S.power = true; S.kpScr.material.color.setHex(0x3aff5a);
+  if (A.ctx){ hsfx.slam(fxPan(22.5, 3, 22.5)); sfx.heehee(A.dry, 1.2, 1); }
+  say('The whole park roars to life. Lights, music, the rides spinning. The keypad by the gate lights up.', 5);
+  setTimeout(() => tikiSay('power'), 1500); TD.t = 24;
+  if (!state.explore) hearAt(P.x, P.z, 0, true);
+  RUN.cd = Math.min(RUN.cd, 6);
+}
+function openGate(){
+  const S = L.park; state.exitOpen = true; S.power = true; S.gateT = 0.01; S.kpScr.material.color.setHex(0x3aff5a);
+  S.gateLight.color.setHex(0x9aff8a); L.exitLight.distance = 14;
+  if (A.ctx){ hsfx.slam(fxPan(22.5, 2, 1)); sfx.heehee(A.dry, 1.2, 1); }
+  say('The code takes. The gate grinds open. RUN.', 3);
+  if (!state.explore) hearAt(P.x, P.z, 0, true);
+}
+// explore mode: every key or breaker already done, exit already open
+function giveAllKeys(){
+  for (const k of L.keys){
+    if (k.taken) continue; k.taken = true;
+    if (k.lever){ k.handle.rotation.x = 1.1; k.light.color.setHex(0x50ff70); k.light.intensity = 1.2; } else { k.mesh.visible = false; k.light.intensity = 0; }
+  }
+  state.keys = 3; renderKeys();
+  if (STAGE === 'park'){ PS.tickets = 3; PS.hasKey = true; const S = L.park; S.kpScr.material.color.setHex(0x3aff5a); state.exitOpen = true; S.power = true; S.gateT = 0.01; S.gateLight.color.setHex(0x9aff8a); }
+  else { state.exitOpen = true; L.door.visible = false; L.daylight.visible = true; L.exitLight.color.setHex(0xe8ffe0); L.exitLight.intensity = 1.6; L.exitLight.distance = 10; }
+}
+function goToPark(){
+  Object.assign(PS, { tickets:0, hasKey:false, fortuneCD:0, riddle:null }); pzClose(); STALLS.forEach(st => { st.won = false; }); PZ.dig = [0, 0, 0];
+  TD.started = false; tikiHush(); loadTiki();
+  const fd = $('fade'); fd.hidden = false; fd.style.transition = 'none'; fd.style.opacity = 1;
+  state.keys = 0; state.exitOpen = false; mapView.hidden = true; clearFlash();
+  if (creature && C.state === 'dead'){ corpses.push(creature); creature = null; }
+  for (const c of corpses){ scene.remove(c.g); disposeTree(c.g); } corpses.length = 0;
+  buildPark();
+  Object.assign(P, { x:PARK_START.x, z:PARK_START.z, f:0, yaw:PARK_START.yaw, pitch:0, hidden:null, reading:null }); settle(P);
+  amb.color.setHex(state.explore ? 0xfff2e0 : 0x3a1c1c); amb.intensity = state.explore ? 0.85 : 0.5;
+  if (state.explore){ C.state = 'gone'; C.timer = Infinity; giveAllKeys(); }
+  else {
+    if (!creature) creature = makeCreature();
+    Object.assign(C, { x:PARK_SPAWN.x + 0.5, z:PARK_SPAWN.z + 0.5, f:0, path:[], state:'crawl', target:null, timer:0, speed:0, standB:0, headYaw:0, lookT:0, reach:0, idleT:10, hearCD:0, upright:false, sublT:5 });
+    settle(C); creature.g.position.set(C.x, C.y, C.z); creature.g.visible = true;
+    state.grace = 30; RUN.cd = 20;
+  }
+  renderKeys(); lastStatus = '';
+  requestAnimationFrame(() => { fd.style.transition = 'opacity 1.8s'; fd.style.opacity = 0; setTimeout(() => { fd.hidden = true; fd.style.transition = ''; }, 1900); });
+  say(state.explore ? 'Kekland Amusements. The power is on and the gate is open. Look around as long as you like.' : 'You stumble out into the night. This is not the street. A dead fairground stretches to a locked gate on the far side.', 6);
+}
+
+/* ---------- fairground puzzles: stall games, the fortune teller's riddle, the gate keypad ---------- */
+const STALLS = [
+  { name:'ring toss', x:11.5, z:30.5, zone:0.16, speed:1.0 }, { name:'hook-a-duck', x:34.5, z:16.5, zone:0.18, speed:0.85 },
+  { name:'test your strength', x:38.5, z:32.5, zone:0.09, speed:1.5 }, { name:'balloon darts', x:40.5, z:14.5, zone:0.13, speed:1.2 },
+  { name:'hoop shot', x:15.5, z:35.5, zone:0.2, speed:0.9 }, { name:'coconut shy', x:29.5, z:35.5, zone:0.2, speed:0.95 }
+];
+const RIDDLES = [
+  { q:"I have a face but no eyes. I have hands but cannot hold you. At midnight I call out, and nobody answers. What am I?", a:['The grandfather clock', 'A mirror', 'A portrait'], ok:0 },
+  { q:"The more of me you take, the more you leave behind you in the dark. What am I?", a:['Breaths', 'Footsteps', 'Keys'], ok:1 },
+  { q:"I go round and round but never leave. I carry children who never get off. What am I?", a:['The Ferris wheel', 'A clock hand', 'The carousel'], ok:2 },
+  { q:"Everyone in this park wears me, and nobody can take me off. What am I?", a:['A smile', 'A mask', 'A hat'], ok:0 }
+];
+const PZ = { open:false, type:null };
+const PS = { tickets:0, hasKey:false, code:[0, 0, 0], codeSeen:[false, false, false], fortuneCD:0, riddle:null, gateCode:false };
+function pzShow(title, html){ $('pzTitle').textContent = title; $('pzBody').innerHTML = html; $('pz').hidden = false; PZ.open = true; }
+function pzClose(){ $('pz').hidden = true; PZ.open = false; PZ.type = null; }
+// stall game: stop the sliding marker inside the red zone
+function openStall(st){
+  if (st.won){ say(`You already won at the ${st.name}.`, 2); return; }
+  PZ.type = 'stall'; PZ.st = st; PZ.pos = 0; PZ.dir = 1; PZ.zone0 = 0.15 + rand()*(0.7 - st.zone); PZ.cool = 0;
+  pzShow(st.name.toUpperCase(), `<p>Stop the marker inside the red. Hit or miss, it will be loud.</p><div class="track"><div class="zone" style="left:${PZ.zone0*100}%;width:${st.zone*100}%"></div><div class="mark" id="pzMark"></div></div>
+    <div class="row"><button type="button" id="pzHit">Play (E / Space)</button><button type="button" id="pzQuit">Walk away (Esc)</button></div>`);
+  $('pzHit').onclick = () => pzInput('use'); $('pzQuit').onclick = pzClose;
+}
+function stallHit(){
+  const st = PZ.st, ok = PZ.pos >= PZ.zone0 && PZ.pos <= PZ.zone0 + st.zone, p = A.ctx ? fxPan(st.x, 1.5, st.z) : null;
+  if (ok){
+    st.won = true; PS.tickets++; renderInv();
+    if (p){ tone(p, { f:1320, peak:.35, dec:1.2 }); tone(p, { f:1760, peak:.25, dec:1, when:.15 }); tone(p, { f:2640, peak:.15, dec:.8, when:.3 }); }
+    makeNoise(10); pzClose();
+    say(PS.tickets < 3 ? `A prize ticket! ${3 - PS.tickets} more. That bell carried.` : 'Three tickets. Take them to the fortune teller.', 3);
+    setTimeout(() => tikiSay('winner'), 900);
+  } else {
+    if (p){ tone(p, { f:140, type:'sawtooth', peak:.3, dec:.6, lp:900 }); noiseHit(p, { f:600, q:1, peak:.3, dec:.3 }); }
+    makeNoise(7); PZ.cool = 0.8; say('Miss. Try again, quickly.', 1.2);
+  }
+}
+// the fortune teller trades three tickets for a riddle; answer it and she gives you the breaker key
+function openFortune(){
+  if (PS.hasKey){ say(`The veiled figure doesn't move. The crystal shows three numbers in blood: at the carousel, the wheel and the big top.`, 3.5); return; }
+  if (PS.tickets < 3){ say(`A hand with too many joints slides out of the veil, palm up. It wants three prize tickets. You have ${PS.tickets}.`, 3.5); return; }
+  if (PS.fortuneCD > 0){ say('She is still screaming. Come back in a moment.', 2); return; }
+  const r = PS.riddle || (PS.riddle = RIDDLES[Math.floor(rand()*RIDDLES.length)]);
+  PZ.type = 'riddle';
+  pzShow('MADAME FORTUNE', `<p>“${r.q}”</p><div class="opts">${r.a.map((t, i) => `<button type="button" data-i="${i}">${i + 1}. ${t}</button>`).join('')}</div><p class="keys" style="margin-top:10px">Press 1, 2 or 3 · Esc to walk away</p>`);
+  $('pzBody').querySelectorAll('button[data-i]').forEach(b => { b.onclick = () => answerRiddle(+b.dataset.i); });
+}
+function answerRiddle(i){
+  const r = PS.riddle, p = A.ctx ? fxPan(3.9, 1.2, 21) : null;
+  pzClose();
+  if (i === r.ok){
+    PS.hasKey = true; renderInv();
+    if (p){ tone(p, { f:880, type:'triangle', peak:.2, dec:1.4 }); tone(p, { f:1320, type:'triangle', peak:.12, dec:1.2, when:.2 }); }
+    say('“Correct.” A small iron key drops into your hand. “The gate wants three numbers. They are painted where the horses run, where the wheel turns, and where the big top screams.”', 6);
+    setTimeout(() => tikiSay('fortune'), 1500);
+  } else {
+    if (p) hsfx.scream(p);
+    makeNoise(12); PS.fortuneCD = 10; PS.riddle = null;
+    say('Wrong. She SHRIEKS. Everything in the park heard that.', 3);
+  }
+}
+// the gate keypad: three dials
+function openKeypad(){
+  if (state.exitOpen) return;
+  if (state.keys < 3){ say(`The keypad is dark. The park has no power. ${3 - state.keys} breaker${3 - state.keys === 1 ? '' : 's'} still off.`, 2.5); return; }
+  PZ.type = 'keypad'; PZ.dig = PZ.dig || [0, 0, 0]; PZ.sel = 0; renderKeypad();
+}
+function renderKeypad(){
+  pzShow('GATE CONTROL', `<p>Three numbers, painted in blood around the park.</p><div class="dials">${PZ.dig.map((d, i) => `<div class="dial${i === PZ.sel ? ' sel' : ''}">${d}</div>`).join('')}</div>
+    <p class="keys">A / D choose · W / S change · E to try · Esc to walk away</p>
+    <div class="row"><button type="button" id="kpL">◀</button><button type="button" id="kpU">▲</button><button type="button" id="kpD">▼</button><button type="button" id="kpR">▶</button><button type="button" id="kpGo">Enter</button></div>`);
+  $('kpL').onclick = () => pzInput('left'); $('kpR').onclick = () => pzInput('right'); $('kpU').onclick = () => pzInput('up'); $('kpD').onclick = () => pzInput('down'); $('kpGo').onclick = () => pzInput('use');
+}
+function tryCode(){
+  const ok = PZ.dig.every((d, i) => d === PS.code[i]), p = A.ctx ? fxPan(22.5, 1.5, 1.5) : null;
+  if (ok){ pzClose(); if (p) tone(p, { f:1200, type:'square', peak:.12, dec:.4, lp:2400 }); openGate(); }
+  else { if (p){ tone(p, { f:180, type:'square', peak:.25, dec:.6, lp:1200 }); } makeNoise(8); say('Wrong code. The keypad buzzes, loud.', 2); renderKeypad(); }
+}
+function pzInput(k){
+  if (!PZ.open) return;
+  if (k === 'esc'){ pzClose(); return; }
+  if (PZ.type === 'stall'){ if (k === 'use' && PZ.cool <= 0) stallHit(); }
+  else if (PZ.type === 'riddle'){ if (k === '1' || k === '2' || k === '3') answerRiddle(+k - 1); }
+  else if (PZ.type === 'keypad'){
+    if (k === 'left') PZ.sel = (PZ.sel + 2) % 3; else if (k === 'right') PZ.sel = (PZ.sel + 1) % 3;
+    else if (k === 'up') PZ.dig[PZ.sel] = (PZ.dig[PZ.sel] + 1) % 10; else if (k === 'down') PZ.dig[PZ.sel] = (PZ.dig[PZ.sel] + 9) % 10;
+    else if (k === 'use'){ tryCode(); return; }
+    if (A.ctx) noiseHit(A.master, { f:3000, q:6, peak:.1, dec:.02 });
+    renderKeypad();
+  }
+}
+function updatePuzzle(dt){
+  PS.fortuneCD = Math.max(0, PS.fortuneCD - dt);
+  if (!PZ.open || PZ.type !== 'stall') return;
+  PZ.cool = Math.max(0, PZ.cool - dt);
+  PZ.pos += PZ.dir*PZ.st.speed*dt; if (PZ.pos > 1){ PZ.pos = 1; PZ.dir = -1; } if (PZ.pos < 0){ PZ.pos = 0; PZ.dir = 1; }
+  const m = $('pzMark'); if (m) m.style.left = `calc(${PZ.pos*100}% - 2px)`;
+}
+function objectiveText(){
+  if (STAGE === 'house') return state.keys < 3 ? `Find the 3 brass keys (${state.keys}/3)` : 'Get out through the front door';
+  if (!PS.hasKey) return PS.tickets < 3 ? `Win 3 prize tickets at the game stalls (${PS.tickets}/3)` : 'Take your tickets to the fortune teller';
+  if (state.keys < 3) return `Throw the 3 breakers (${state.keys}/3)`;
+  if (!state.exitOpen) return 'Enter the 3-digit code at the gate. The numbers are painted in blood around the park.';
+  return 'Get out through the gate';
+}
+
 /* ---------- level build ---------- */
 const wallMatG = new THREE.MeshPhongMaterial({ map:wallTexG, shininess:3 });
 const wallMatB = new THREE.MeshPhongMaterial({ map:wallTexB, shininess:3 });
@@ -1630,9 +2298,14 @@ function instanced(geo, mat, cells, y){
   im.count = cells.length;
   return im;
 }
-function buildLevel(){
+function clearLevel(){
+  if (L && L.park && L.park.amb){ try { L.park.amb.src.stop(); } catch(e){} L.park.amb = null; }
   if (L && L.props) stopPropAudio(L.props);
   if (L){ scene.remove(L.group); L.group.traverse(o => { if (o.geometry && ![WALL_GEO, FLOOR_GEO, CEIL_GEO].includes(o.geometry) && !Object.values(dirtGeo).includes(o.geometry)) o.geometry.dispose(); }); }
+}
+function buildLevel(){
+  clearLevel();
+  STAGE = 'house'; W = 33; H = 25; STAIR = HOUSE_STAIR; EXIT = HOUSE_EXIT;
   const grids = makeGrids();
   const group = new THREE.Group(); scene.add(group);
   for (const f of [0, 1]){
@@ -1997,6 +2670,11 @@ addEventListener('keydown', e => {
     if (e.code === 'KeyF') toggleLight();
     if (e.code === 'KeyC') toggleSneak();
     if (e.code === 'KeyQ') drink();
+    if (PZ.open){
+      const map = { Space:'use', KeyE:'use', Escape:'esc', Digit1:'1', Digit2:'2', Digit3:'3', KeyA:'left', ArrowLeft:'left', KeyD:'right', ArrowRight:'right', KeyW:'up', ArrowUp:'up', KeyS:'down', ArrowDown:'down', Enter:'use' };
+      if (map[e.code]){ pzInput(map[e.code]); e.preventDefault(); }
+      return;
+    }
     if (e.code === 'KeyE') interact();
     if (e.code === 'Escape' && P.reading) closeNote();
     if (e.code === 'KeyM') toggleMap();
@@ -2013,7 +2691,7 @@ document.addEventListener('mousemove', e => {
   if (document.pointerLockElement === cv) turn(e.movementX, e.movementY, 0.0022);
   else if (dragging) turn(e.movementX, e.movementY, 0.004);
 });
-cv.addEventListener('mousedown', () => { if (state.mode !== 'play') return; if (document.pointerLockElement === cv){ if (P.reading) closeNote(); else swing(); } else { dragging = true; lockPointer(); } });
+cv.addEventListener('mousedown', () => { if (state.mode !== 'play') return; if (document.pointerLockElement === cv){ if (PZ.open) pzInput('use'); else if (P.reading) closeNote(); else swing(); } else { dragging = true; lockPointer(); } });
 addEventListener('mouseup', () => { dragging = false; });
 function lockPointer(){
   if (isTouch) return;
@@ -2088,7 +2766,8 @@ function updateHud(){
   noiseBars.forEach((b, i) => b.classList.toggle('on', i < lvl));
   noiseEl.classList.toggle('loud', lvl === 3);
   const left = L.keys.filter(k => !k.taken && k.f === P.f).length;
-  const st = (state.explore ? 'Exploring · ' : '') + FLOOR_NAMES[P.f] + (state.keys < 3 ? ` · ${left} key${left === 1 ? '' : 's'} on this floor` : ' · get to the front door');
+  const ot = objectiveText(); if ($('obj').dataset.t !== ot){ $('obj').dataset.t = ot; $('obj').innerHTML = '<b>OBJECTIVE</b>' + ot; }
+  const st = (state.explore ? 'Exploring · ' : '') + (STAGE === 'park' ? 'Kekland Amusements' + (state.exitOpen ? ' · the gate is open' : state.keys < 3 ? ` · ${3 - state.keys} breaker${3 - state.keys === 1 ? '' : 's'} left` : ' · the power is on') : FLOOR_NAMES[P.f] + (state.keys < 3 ? ` · ${left} key${left === 1 ? '' : 's'} on this floor` : ' · get to the front door'));
   if (st !== lastStatus){ $('status').textContent = st; lastStatus = st; }
   const sb = $('stam'); $('stamFill').style.width = P.stam + '%';
   sb.classList.toggle('tired', P.lock); sb.style.opacity = P.stam >= 100 ? 0.2 : 1;
@@ -2098,8 +2777,9 @@ function renderInv(){
   const parts = [];
   if (P.drinks) parts.push(`Drinks <b>${P.drinks}</b>`);
   if (P.weapon) parts.push(`<b>${P.weapon.name}</b>`);
+  if (STAGE === 'park'){ if (PS.tickets && !PS.hasKey) parts.push(`Tickets <b>${PS.tickets}/3</b>`); if (PS.hasKey) parts.push('<b>breaker key</b>'); }
   if (P.maps.size) parts.push(`Map <b>${P.maps.size}/4</b>`);
-  if (state.notes) parts.push(`Notes <b>${state.notes}/${NOTES.length}</b>`);
+  if (state.notes) parts.push(`Notes <b>${state.notes}/${NOTES.length + PARK_NOTES.length}</b>`);
   $('inv').innerHTML = parts.join(' · ');
 }
 const mapView = $('mapView'), mapCv = $('mapCv'), mctx = mapCv.getContext('2d');
@@ -2107,6 +2787,7 @@ const MCS = 10, MPAD = 12, MPW = W*MCS, MPH = H*MCS;
 let mapT = 0;
 function toggleMap(){
   if (state.mode !== 'play') return;
+  if (STAGE === 'park'){ say('The map scraps only cover the house.', 2); return; }
   mapView.hidden = !mapView.hidden;
   if (!mapView.hidden) drawMap();
 }
@@ -2217,11 +2898,11 @@ function startPlay(explore){
   newGame();
   setLights(state.explore);
   creature.g.visible = !state.explore;
-  if (state.explore){ C.state = 'gone'; C.timer = Infinity; RUN.cd = Infinity; state.grace = 0; }
+  if (state.explore){ C.state = 'gone'; C.timer = Infinity; RUN.cd = Infinity; state.grace = 0; giveAllKeys(); }
   show(null); $('hud').hidden = false; $('cam').hidden = !GFX.high; touchEl.hidden = !isTouch; $('scare').hidden = true;
   state.mode = 'play';
   lockPointer();
-  if (state.explore) say('Lights on. Nothing is hunting you. Look around as long as you like.' + (isTouch ? '' : ' Esc to pause or leave.'), 6); else
+  if (state.explore) say('Lights on. Nothing is hunting you, and you already have all three keys. The front door is open when you want to see the fairground.', 6); else
   say(isTouch ? "Find the three keys. It can't see you, but it hears everything. Tap SNEAK to move quietly." : "Find the three keys. It can't see you, but it hears everything. Press C to sneak.", 6);
 }
 function pause(){
@@ -2229,7 +2910,8 @@ function pause(){
   state.mode = 'pause'; show('pause'); touchEl.hidden = true;
   runHeld = false; stick.id = look.id = null; stick.x = stick.y = 0; base.style.display = 'none';
   if (A.servoG) A.servoG.gain.value = 0;
-  muteDread();
+  muteDread(); tikiHush(); pzClose();
+  if (L && L.park && L.park.amb) L.park.amb.out.gain.value = 0;
 }
 function resume(){
   if (state.mode !== 'pause') return;
@@ -2241,12 +2923,13 @@ function endGame(won){
   try { if (document.exitPointerLock) document.exitPointerLock(); } catch(e){}
   touchEl.hidden = true; runHeld = false;
   drawGrain(0); $('redpulse').style.opacity = 0; clearFlash(); mapView.hidden = true; if (L && L.props) stopPropAudio(L.props); $('cam').hidden = true;
-  $('slats').hidden = true; $('note').hidden = true; setPrompt(''); muteDread();
+  $('slats').hidden = true; $('note').hidden = true; setPrompt(''); muteDread(); tikiHush(); pzClose();
+  if (L && L.park && L.park.amb){ L.park.amb.out.gain.cancelScheduledValues(0); L.park.amb.out.gain.value = 0; }
   if (A.servoG) A.servoG.gain.value = 0;
   if (won){
     const b = getBest(), best = !b || state.time < b;
     if (best) setBest(state.time);
-    $('winStat').innerHTML = `Time <b>${fmt(state.time)}</b>${best ? ' · new best' : ' · best <b>' + fmt(b) + '</b>'}` + (state.kills ? ` · destroyed <b>${state.kills}</b>` : '') + ` · notes <b>${state.notes}/${NOTES.length}</b>`;
+    $('winStat').innerHTML = `Time <b>${fmt(state.time)}</b>${best ? ' · new best' : ' · best <b>' + fmt(b) + '</b>'}` + (state.kills ? ` · destroyed <b>${state.kills}</b>` : '') + ` · notes <b>${state.notes}/${NOTES.length + PARK_NOTES.length}</b>`;
     $('hud').hidden = true; show('win'); showBest();
   } else {
     $('hud').hidden = true; $('cam').hidden = !GFX.high; startDeath();
@@ -2257,6 +2940,7 @@ $('play').addEventListener('click', () => startPlay(false));
 
 $('quit').addEventListener('click', quitToTitle);
 function quitToTitle(){
+  tikiHush();
   if (L && L.props) stopPropAudio(L.props);
   state.explore = false; setLights(false);
   $('hud').hidden = true; $('cam').hidden = true; touchEl.hidden = true; mapView.hidden = true; drawGrain(0); $('redpulse').style.opacity = 0; clearFlash();
@@ -2301,17 +2985,26 @@ function nearestInteract(){
   };
   for (const n of L.notes) consider(n.x, n.z, n.f, 1.6, { kind:'note', obj:n, label:USE() + 'read' });
   for (const h of L.hides) consider(h.cx, h.cz, h.f, 1.45, { kind:'hide', obj:h, label:USE() + 'hide inside' });
+  if (STAGE === 'park'){
+    for (const st of STALLS) consider(st.x, st.z, 0, 1.4, { kind:'stall', obj:st, label:USE() + (st.won ? 'already won' : 'play ' + st.name) });
+    consider(4.5, 21.3, 0, 1.6, { kind:'fortune', obj:null, label:USE() + 'speak to the fortune teller' });
+    consider(24.2, 2.2, 0, 1.6, { kind:'keypad', obj:null, label:USE() + 'use the gate keypad' });
+  }
   for (const d of L.doors) consider(d.cx, d.cz, d.f, 1.7, { kind:'door', obj:d, label:USE() + (d.target > 0.5 ? 'close door' : 'open door') });
   return best;
 }
 function interact(){
   if (state.mode !== 'play') return;
+  if (PZ.open){ pzInput('use'); return; }
   if (P.reading){ closeNote(); return; }
   if (P.hidden){ unhide(); return; }
   const it = nearestInteract();
   if (!it){ swing(); return; }
   if (it.kind === 'note') openNote(it.obj);
   else if (it.kind === 'hide') hideIn(it.obj);
+  else if (it.kind === 'stall') openStall(it.obj);
+  else if (it.kind === 'fortune') openFortune();
+  else if (it.kind === 'keypad') openKeypad();
   else toggleDoor(it.obj);
 }
 function toggleDoor(d){
@@ -2368,7 +3061,7 @@ function updatePlayer(dt){
   if (K.KeyW || K.ArrowUp) f += 1; if (K.KeyS || K.ArrowDown) f -= 1;
   if (K.KeyD || K.ArrowRight) s += 1; if (K.KeyA || K.ArrowLeft) s -= 1;
   f -= stick.y; s += stick.x;
-  if (P.reading){ f = 0; s = 0; }
+  if (P.reading || PZ.open){ f = 0; s = 0; }
   const len = Math.hypot(f, s); if (len > 1){ f /= len; s /= len; }
   const amt = Math.min(1, len);
   P.moving = amt > 0.1;
@@ -2404,11 +3097,15 @@ function updatePlayer(dt){
 
   for (const k of L.keys){
     if (k.taken) continue;
-    k.mesh.rotation.y += dt*1.8; k.mesh.position.y = k.y + 1 + Math.sin(state.time*2 + k.x)*0.08;
+    if (!k.lever){ k.mesh.rotation.y += dt*1.8; k.mesh.position.y = k.y + 1 + Math.sin(state.time*2 + k.x)*0.08; }
     if (k.f === P.f && Math.hypot(P.x - k.x, P.z - k.z) < 0.9){
-      k.taken = true; k.mesh.visible = false; k.light.intensity = 0; state.keys++; renderKeys(); sfx.pickup();
+      if (k.lever && !PS.hasKey){ if (!k.warnT || state.time - k.warnT > 6){ k.warnT = state.time; say('The breaker box is padlocked. You need the breaker key. The fortune teller might have it.', 3); tikiSay('locked'); } continue; }
+      k.taken = true; state.keys++; renderKeys(); sfx.pickup();
+      if (k.lever){ k.handle.rotation.x = 1.1; k.light.color.setHex(0x50ff70); k.light.intensity = 1.2; if (A.ctx){ hsfx.bang(fxPan(k.x, 1, k.z)); noiseHit(fxPan(k.x, 1.2, k.z), { f:5000, q:2, peak:.5, dec:.3 }); } }
+      else { k.mesh.visible = false; k.light.intensity = 0; }
       makeNoise(6);
-      if (state.keys < 3) say(state.keys === 1 ? 'A brass key. Two more. The jingle carried.' : 'Two keys. One more somewhere.');
+      if (STAGE === 'park' && state.keys < 3) setTimeout(() => tikiSay('breaker' + Math.min(3, state.keys)), 1200);
+      if (state.keys < 3) say(STAGE === 'park' ? `You throw the ${k.name} breaker. Sparks, then a low hum. ${3 - state.keys} to go.` : state.keys === 1 ? 'A brass key. Two more. The jingle carried.' : 'Two keys. One more somewhere.');
       else openExit();
     }
   }
@@ -2427,11 +3124,12 @@ function updatePlayer(dt){
     renderInv();
   }
   const gx = Math.floor(P.x), gz = Math.floor(P.z);
-  if (P.f === 0 && !state.exitOpen && gx === EXIT.ix && gz === EXIT.iz && msgT <= 0) say(`The front door has three locks. ${3 - state.keys} still shut.`, 2.5);
-  if (P.f === 0 && state.exitOpen && gx === EXIT.x && gz === EXIT.z) endGame(true);
+  if (P.f === 0 && !state.exitOpen && gx === EXIT.ix && gz === EXIT.iz && msgT <= 0) say(STAGE === 'park' ? `The gate is electric, and dead. ${3 - state.keys} breaker${3 - state.keys === 1 ? '' : 's'} still off.` : `The front door has three locks. ${3 - state.keys} still shut.`, 2.5);
+  if (P.f === 0 && state.exitOpen && gx === EXIT.x && gz === EXIT.z){ if (STAGE === 'house') goToPark(); else endGame(true); }
   updateHud();
 }
 function openExit(){
+  if (STAGE === 'park'){ powerOn(); return; }
   state.exitOpen = true; L.door.visible = false; L.daylight.visible = true;
   L.exitLight.color.setHex(0xe8ffe0); L.exitLight.intensity = 1.6; L.exitLight.distance = 10;
   sfx.door();
@@ -2441,10 +3139,13 @@ function openExit(){
 }
 
 /* ---------- the Ayukiki's brain: it only hears ---------- */
+// at the fairground it lies low until the power comes on: it hears less and moves slower
+function parkCalm(){ return STAGE === 'park' && L && L.park && !L.park.power; }
+function hearMul(){ return parkCalm() ? 0.5 : 1; }
 function hearDist(x, y, z){ return Math.hypot(x - C.x, z - C.z) + Math.abs(y - C.y)*2.5; }
 function makeNoise(r){
   if (state.mode !== 'play' || state.grace > 0) return;
-  if (hearDist(P.x, P.y, P.z) < r) hearAt(P.x, P.z, P.f);
+  if (hearDist(P.x, P.y, P.z) < r*hearMul()) hearAt(P.x, P.z, P.f);
 }
 function hearAt(x, z, f, far){
   if (!creature || C.state === 'dead' || C.state === 'gone') return;
@@ -2487,7 +3188,8 @@ function followPath(spd, dt){
   if (cMoveToward(x + 0.5, z + 0.5, spd, dt)) C.path.shift();
 }
 function pickWander(){
-  const pool = rand() < 0.55 ? ROOMS.filter(r => r[0] === P.f) : ROOMS;
+  const RM = STAGE === 'park' ? (parkCalm() ? PARK_ROOMS.filter(r => r[1] !== 'midway' && r[1] !== 'south') : PARK_ROOMS) : ROOMS;
+  const pool = rand() < (parkCalm() ? 0.2 : 0.55) ? RM.filter(r => r[0] === P.f) : RM;
   for (let i = 0; i < 20; i++){
     const [f, , x0, z0, x1, z1] = pool[Math.floor(rand()*pool.length)];
     const x = x0 + Math.floor(rand()*(x1 - x0 + 1)), z = z0 + Math.floor(rand()*(z1 - z0 + 1));
@@ -2537,7 +3239,8 @@ function retireCreature(){
 function spawnCreature(){
   let best = null;
   for (let i = 0; i < 20; i++){
-    const [f, , x0, z0, x1, z1] = ROOMS[Math.floor(rand()*ROOMS.length)];
+    const RM = STAGE === 'park' ? PARK_ROOMS : ROOMS;
+    const [f, , x0, z0, x1, z1] = RM[Math.floor(rand()*RM.length)];
     const x = x0 + Math.floor(rand()*(x1 - x0 + 1)), z = z0 + Math.floor(rand()*(z1 - z0 + 1));
     if (!cPass(f, x, z) || isStair(x, z)) continue;
     const score = Math.hypot(x + 0.5 - P.x, z + 0.5 - P.z) + (f !== P.f ? 15 : 0);
@@ -2563,10 +3266,10 @@ function updateCreature(dt){
   C.hearCD -= dt;
   if (C.hearCD <= 0){
     C.hearCD = 0.2;
-    if (P.noise > 0 && hearDist(P.x, P.y, P.z) < P.noise*(C.f === P.f && shutBetween(P.f, C.x, C.z, P.x, P.z) ? 0.55 : 1)) hearAt(P.x, P.z, P.f);
+    if (P.noise > 0 && hearDist(P.x, P.y, P.z) < hearMul()*P.noise*(C.f === P.f && shutBetween(P.f, C.x, C.z, P.x, P.z) ? 0.55 : 1)) hearAt(P.x, P.z, P.f);
   }
   if (C.state === 'crawl'){
-    C.speed = C.upright ? 1.2 : 1.5;
+    C.speed = (C.upright ? 1.2 : 1.5)*(parkCalm() ? 0.7 : 1);
     if (!C.path.length){ if (rand() < 0.35) listen(2.5 + rand()*2); else { C.path = pickWander(); C.upright = rand() < 0.45; } }
     followPath(C.speed, dt);
     C.idleT -= dt;
@@ -2574,7 +3277,7 @@ function updateCreature(dt){
   } else if (C.state === 'hunt'){
     C.jerkT -= dt;
     if (C.jerkT <= 0){ C.jerkFast = !C.jerkFast; C.jerkT = C.jerkFast ? 0.35 + rand()*0.2 : 0.1 + rand()*0.12; }
-    C.speed = (3.2 + state.keys*0.3)*(C.jerkFast ? 1.3 : 0.15);
+    C.speed = (3.2 + state.keys*0.3)*(C.jerkFast ? 1.3 : 0.15)*(parkCalm() ? 0.8 : 1);
     followPath(C.speed, dt);
     if (!C.path.length && !trySearch()) listen(3.5 + rand()*2);
   } else if (C.state === 'lunge'){
@@ -2697,7 +3400,7 @@ function updateRunner(dt){
     // only when the real one is nowhere near, so you never see two at once
     const alive = creature && C.state !== 'gone' && C.state !== 'dead';
     const far = !alive || C.f !== P.f || Math.hypot(P.x - C.x, P.z - C.z) > 14;
-    if (RUN.cd <= 0 && !state.explore && !P.hidden && state.grace <= 0 && far && !isStair(Math.floor(P.x), Math.floor(P.z))) RUN.cd = tryRunner() ? 30 + rand()*35 : 2;
+    if (RUN.cd <= 0 && !state.explore && !P.hidden && !parkCalm() && state.grace <= 0 && far && !isStair(Math.floor(P.x), Math.floor(P.z))) RUN.cd = tryRunner() ? 30 + rand()*35 : 2;
     return;
   }
   const st = Math.min(RUN.left, RUN.speed*dt);
@@ -2838,7 +3541,7 @@ function updateAudio(dt){
 let lastT = performance.now();
 function frame(now){
   const dt = Math.min(0.05, (now - lastT)/1000); lastT = now;
-  if (L) L.bulb.intensity = rand() < 0.05 ? rand()*0.2 : 0.55;
+  if (L && L.bulb) L.bulb.intensity = rand() < 0.05 ? rand()*0.2 : 0.55;
   if (state.mode === 'play'){
     state.time += dt;
     updatePlayer(dt);
