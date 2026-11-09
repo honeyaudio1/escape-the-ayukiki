@@ -2107,7 +2107,7 @@ function openGate(){
 function giveAllKeys(){
   for (const k of L.keys){
     if (k.taken) continue; k.taken = true;
-    if (k.lever){ k.handle.rotation.x = 1.1; k.light.color.setHex(0x50ff70); k.light.intensity = 1.2; } else { k.mesh.visible = false; k.light.intensity = 0; }
+    if (k.lever){ k.handle.rotation.x = 1.1; k.light.color.setHex(0x50ff70); k.light.intensity = 1.2; } else { k.mesh.visible = false; k.light.intensity = 0; if (k.shaft) k.shaft.visible = false; }
   }
   state.keys = 3; renderKeys();
   if (STAGE === 'park'){ PS.tickets = 3; PS.hasKey = true; const S = L.park; S.kpScr.material.color.setHex(0x3aff5a); state.exitOpen = true; S.power = true; S.gateT = 0.01; S.gateLight.color.setHex(0x9aff8a); }
@@ -2356,8 +2356,10 @@ function buildLevel(){
     for (const t of [0.13, 0.18]){ const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.07, 0.03), keyMat); tooth.position.set(t, -0.045, 0); kg.add(tooth); }
     const y = levelY(f);
     kg.position.set(x + 0.5, y + 1, z + 0.5); group.add(kg);
-    const kl = new THREE.PointLight(0xd4a64c, 0.7, 4, 2); kl.position.set(x + 0.5, y + 1.3, z + 0.5); group.add(kl);
-    return { f, x:x + 0.5, z:z + 0.5, y, mesh:kg, light:kl, taken:false };
+    const kl = new THREE.PointLight(0xd4a64c, 1.6, 8, 2); kl.position.set(x + 0.5, y + 1.3, z + 0.5); group.add(kl);
+    const glowShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.45, 2.8, 12, 1, true), new THREE.MeshBasicMaterial({ color:0xffc860, transparent:true, opacity:0.12, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, fog:false }));
+    glowShaft.position.set(x + 0.5, y + 1.4, z + 0.5); group.add(glowShaft);
+    return { f, x:x + 0.5, z:z + 0.5, y, mesh:kg, light:kl, shaft:glowShaft, taken:false };
   });
 
   // scrawled warnings on long stretches of wall
@@ -2874,7 +2876,7 @@ const screens = ['title', 'pause', 'over', 'win'];
 function show(id){ for (const s of screens) $(s).hidden = s !== id; }
 function newGame(){
   buildLevel();
-  state.keys = 0; state.exitOpen = false; state.time = 0; state.grace = 8; state.kills = 0;
+  state.keys = 0; state.exitOpen = false; state.time = 0; state.grace = 25; state.kills = 0;
   Object.assign(P, { x:START.x, z:START.z, f:0, y:0, yaw:START.yaw, pitch:0, eye:1.6, stam:100, lock:false, sneak:false, noise:0, light:true,
     drinks:0, weapon:null, maps:new Set(), boostT:0, swingCD:0, swingT:0, hidden:null, reading:null, breathT:0 });
   flash.visible = true; $('sneakBtn').classList.remove('on');
@@ -3098,11 +3100,12 @@ function updatePlayer(dt){
   for (const k of L.keys){
     if (k.taken) continue;
     if (!k.lever){ k.mesh.rotation.y += dt*1.8; k.mesh.position.y = k.y + 1 + Math.sin(state.time*2 + k.x)*0.08; }
-    if (k.f === P.f && Math.hypot(P.x - k.x, P.z - k.z) < 0.9){
+    if (k.shaft) k.shaft.material.opacity = 0.09 + 0.05*Math.sin(state.time*2.5 + k.x);
+    if (k.f === P.f && Math.hypot(P.x - k.x, P.z - k.z) < (k.lever ? 0.9 : 1.4)){
       if (k.lever && !PS.hasKey){ if (!k.warnT || state.time - k.warnT > 6){ k.warnT = state.time; say('The breaker box is padlocked. You need the breaker key. The fortune teller might have it.', 3); tikiSay('locked'); } continue; }
       k.taken = true; state.keys++; renderKeys(); sfx.pickup();
       if (k.lever){ k.handle.rotation.x = 1.1; k.light.color.setHex(0x50ff70); k.light.intensity = 1.2; if (A.ctx){ hsfx.bang(fxPan(k.x, 1, k.z)); noiseHit(fxPan(k.x, 1.2, k.z), { f:5000, q:2, peak:.5, dec:.3 }); } }
-      else { k.mesh.visible = false; k.light.intensity = 0; }
+      else { k.mesh.visible = false; k.light.intensity = 0; if (k.shaft) k.shaft.visible = false; }
       makeNoise(6);
       if (STAGE === 'park' && state.keys < 3) setTimeout(() => tikiSay('breaker' + Math.min(3, state.keys)), 1200);
       if (state.keys < 3) say(STAGE === 'park' ? `You throw the ${k.name} breaker. Sparks, then a low hum. ${3 - state.keys} to go.` : state.keys === 1 ? 'A brass key. Two more. The jingle carried.' : 'Two keys. One more somewhere.');
